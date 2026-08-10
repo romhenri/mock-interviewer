@@ -1,4 +1,4 @@
-import type { Score } from "./types";
+import type { Score, ScoreSlot } from "./types";
 
 export const CRITERIA = ["correctness", "clarity", "depth"] as const;
 
@@ -27,18 +27,30 @@ export function parseScore(raw: unknown): Score {
   if (typeof candidate.feedback !== "string" || !candidate.feedback.trim()) {
     throw new Error("Judge returned no feedback.");
   }
+  if (typeof candidate.suggestedAnswer !== "string" || !candidate.suggestedAnswer.trim()) {
+    throw new Error("Judge returned no suggested answer.");
+  }
 
-  return { ...scores, feedback: candidate.feedback };
+  return {
+    ...scores,
+    feedback: candidate.feedback,
+    suggestedAnswer: candidate.suggestedAnswer,
+  };
+}
+
+/** Narrows a stored slot to a real score — excludes skipped, pending and failed. */
+export function isScore(slot: ScoreSlot): slot is Score {
+  return slot !== null && !("error" in slot);
 }
 
 /**
  * Mean of each criterion across every scored answer, rounded to whole points.
- * Skipped questions are stored as null and are excluded from both the total and
- * the divisor — counting them as zero would punish skipping as if it were a
- * wrong answer.
+ * Skipped, pending and failed slots are excluded from both the total and the
+ * divisor — counting them as zero would punish skipping, or a network error, as
+ * if it were a wrong answer.
  */
-export function averageScores(scores: (Score | null)[]): Record<Criterion, number> {
-  const answered = scores.filter((score) => score !== null);
+export function averageScores(scores: ScoreSlot[]): Record<Criterion, number> {
+  const answered = scores.filter(isScore);
   const averages = {} as Record<Criterion, number>;
   for (const criterion of CRITERIA) {
     const total = answered.reduce((sum, score) => sum + score[criterion], 0);

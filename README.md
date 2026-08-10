@@ -1,7 +1,7 @@
 # Mock Interviewer
 
-Pick a role, answer three generated interview questions, get each answer scored 0–100 on
-correctness, clarity and depth by an LLM judge. Questions and scoring both run through
+Pick a role, answer three generated interview questions in two or three sentences each, get each
+answer scored 0–100 on correctness, clarity and depth by an LLM judge. Questions and scoring both run through
 [OpenRouter](https://openrouter.ai); the API key stays server-side.
 
 ```
@@ -50,13 +50,15 @@ an interview where you skip everything costs the single generation request.
 
 1. `/` — pick AI Engineer or Software Engineer. One call to `/api/generate-questions` returns three
    questions.
-2. `/interview` — one question at a time. Submit an answer and `/api/score-answer` returns
-   `{ correctness, clarity, depth, feedback }`. Scores show immediately, then you move on.
+2. `/interview` — one question at a time. Submitting advances immediately; the `/api/score-answer`
+   call runs in the background while you answer the next question, so you never wait on the judge.
    Forward-only: submitted answers are final and there is no going back. **Skip question** records
    the skip and advances without calling the judge.
-3. `/summary` — every question with its three scores and feedback, plus the average per criterion.
-   Skipped questions are listed as skipped and excluded from the averages entirely — counting them
-   as zero would make skipping look identical to answering wrongly.
+3. `/summary` — all scores, shown only here. Each question gets its three scores, feedback, a
+   **suggested answer** written to the same length budget, and your own answer. Skipped questions
+   are listed as skipped and excluded from the averages entirely — counting them as zero would make
+   skipping look identical to answering wrongly. Answers whose scoring failed, or that are still in
+   flight, are labelled as such and can be scored from a button rather than silently retried.
 
 The whole session lives in `sessionStorage` under `mock-interview-session`. There is no database
 and no account. Closing the tab ends the interview.
@@ -74,9 +76,9 @@ npx tsc --noEmit
 npm run build
 ```
 
-Nine tests, covering the two pieces of logic that can silently produce a wrong number: judge
-response validation with per-criterion averaging (`lib/score.ts`), and stored-session validation
-(`lib/session.ts`). Everything else is a thin wrapper around an HTTP call and is verified by
+Fourteen tests, covering the two pieces of logic that can silently produce a wrong number: judge
+response validation with per-criterion averaging including skips (`lib/score.ts`), and
+stored-session validation (`lib/session.ts`). Everything else is a thin wrapper around an HTTP call and is verified by
 running the app.
 
 ## Notes

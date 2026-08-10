@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { ROLES, type Session } from "./types.ts";
+import { ROLES, type ScoreSlot, type Session } from "./types.ts";
 
 const SESSION_KEY = "mock-interview-session";
 
@@ -43,6 +43,20 @@ export function useSession(): Session | null {
 export function saveSession(session: Session): void {
   sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
   notify();
+}
+
+/**
+ * Writes one score slot, re-reading storage first. Scoring runs in the
+ * background while the candidate answers later questions, so several writes can
+ * be in flight at once — each must merge into current storage rather than
+ * overwrite it with the snapshot it captured when it started.
+ */
+export function saveScoreAt(index: number, slot: ScoreSlot): void {
+  const current = loadSession();
+  if (!current) return;
+  const scores = [...current.scores];
+  scores[index] = slot;
+  saveSession({ ...current, scores });
 }
 
 export function clearSession(): void {

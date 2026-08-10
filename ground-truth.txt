@@ -1,0 +1,30 @@
+1. Load Balancers: What is the practical routing difference between L4 and L7 Load Balancers, and in which scenarios do we use Sticky Sessions vs. Least Connections?
+2. Reverse Proxy: What is the primary function of a Reverse Proxy in system architecture, and how does it differ from a traditional Forward Proxy?
+3. Session Management: What are the pros and cons of using stateless JWTs compared to stateful sessions managed in a Redis cluster?
+4. Concurrency: How does Async execution differ from Thread-based execution in application servers under extremely high loads?
+5. Caching Strategies: Explain the inner workings and appropriate use cases for Cache-Aside, Read-Through, and Write-Through caching patterns.
+6. Cache Invalidation: What is TTL degradation, and how do you prevent Cache Stampede in distributed systems?
+7. Databases: What factors determine the decision between horizontal partitioning (Sharding) vs. Read/Write Replication in SQL databases?
+8. CAP Theorem: In a Network Partition scenario, how do you choose between Consistency and Availability in distributed databases?
+9. Messaging Systems: What is the difference in delivery and consumption between traditional message queues (e.g., RabbitMQ) and partitioned log-based systems (e.g., Kafka)?
+10. Fault Tolerance: What is the Dead Letter Queue (DLQ) pattern, and how do you enforce idempotency in message consumers?
+11. Ordering Guarantees: How does Kafka guarantee message ordering, and what happens if the number of consumers in a Consumer Group exceeds the number of partitions?
+12. CDN & Edge: How does Geo Routing and edge cache invalidation work for dynamic content delivery?
+13. API Communication Protocols: In what scenarios does gRPC with HTTP/2 outperform REST with JSON or GraphQL?
+14. Rate Limiting: Which algorithms (such as Token Bucket or Leaky Bucket) are used to implement Rate Limiting at API Gateways?
+15. Distributed Consensus: How do consensus algorithms like Raft or Paxos solve Leader Election in distributed systems?
+16. Resilience: How does the Circuit Breaker pattern prevent cascading failures across microservices when a dependency becomes unavailable?
+17. Git Internal Structure: Why do Git commit hashes have exactly 40 characters (SHA-1) instead of 32 or 64?
+18. Web & Protocols: Why do so many web URLs redirect by appending a trailing slash (/) to the end of the address?
+19. Read Pointers: In file systems or log architectures, how does byte-offset adjustment optimize incremental reads compared to reading from the beginning?
+20. File Formats: What structural advantage does Parquet's columnar layout offer for analytical queries compared to row-oriented formats?
+21. Indexing Mechanics: How do Clustered vs. Non-Clustered indices work at the disk level, and how do they impact read vs. write performance?
+22. Processing Models: When should an architecture prioritize Real-Time Streaming processing over Batch Execution?
+23. Distributed Processing: What causes Data Skew during join or grouping operations in Spark, and how can it be mitigated?
+24. Staging Layer: What is the purpose of the staging area in a data ingestion pipeline, and why should business rules be excluded from this stage?
+25. OLAP vs. OLTP Data Modeling: Why do normalized schemas (3NF) optimize transactional writes while star schemas optimize analytical reads?
+26. Code Quality & Architecture: What defines Data-Oriented Design, and how do you apply Separation of Concerns when building pipeline architectures?
+27. Production SQL: How do you write an optimized query using Window Functions to deduplicate records while maintaining the most recent event?
+28. Connection Management: What is Connection Pooling, and why is it necessary for application servers handling thousands of concurrent requests?
+29. Authentication & Security: How does the token renewal lifecycle (Access Token vs. Refresh Token) work using JWTs in distributed architectures?
+30. Incident Management: If an unintended script executed modifications directly in production instead of development, what priority steps should be taken to contain the failure?

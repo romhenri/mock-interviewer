@@ -1,24 +1,43 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { QUESTION_COUNT } from "@/lib/prompts";
 import { saveSession } from "@/lib/session";
-import { ROLES, type Role } from "@/lib/types";
+import { ROLES, SUBJECTS, type Role } from "@/lib/types";
 
 export default function RoleSelection() {
   const router = useRouter();
-  const [loading, setLoading] = useState<Role | null>(null);
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [role, setRole] = useState<Role | null>(null);
+  const [subjects, setSubjects] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function start(role: Role) {
-    setLoading(role);
+  function choose(picked: Role) {
+    setRole(picked);
+    setSubjects([]);
+    setError(null);
+    dialog.current?.showModal();
+  }
+
+  function toggle(subject: string) {
+    setSubjects((current) =>
+      current.includes(subject)
+        ? current.filter((s) => s !== subject)
+        : [...current, subject],
+    );
+  }
+
+  async function start() {
+    if (!role) return;
+    setLoading(true);
     setError(null);
     try {
       const response = await fetch("/api/generate-questions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role }),
+        body: JSON.stringify({ role, subjects }),
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Could not generate questions.");
@@ -27,7 +46,7 @@ export default function RoleSelection() {
       router.push("/interview");
     } catch (err) {
       setError((err as Error).message);
-      setLoading(null);
+      setLoading(false);
     }
   }
 
@@ -42,26 +61,80 @@ export default function RoleSelection() {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        {ROLES.map((role) => (
+        {ROLES.map((option) => (
           <button
-            key={role}
-            onClick={() => start(role)}
-            disabled={loading !== null}
-            className="rounded-lg border border-current/20 p-6 text-left transition hover:border-current/50 disabled:opacity-50"
+            key={option}
+            onClick={() => choose(option)}
+            className="rounded-lg border border-current/20 p-6 text-left transition hover:border-current/50"
           >
-            <span className="block text-lg font-medium">{role}</span>
-            <span className="mt-1 block text-sm opacity-60">
-              {loading === role ? "Generating questions…" : "Start interview"}
-            </span>
+            <span className="block text-lg font-medium">{option}</span>
+            <span className="mt-1 block text-sm opacity-60">Pick subjects</span>
           </button>
         ))}
       </div>
 
-      {error && (
-        <p role="alert" className="rounded-lg border border-red-500/40 bg-red-500/10 p-4 text-sm">
-          {error}
-        </p>
-      )}
+      <dialog
+        ref={dialog}
+        onClose={() => setRole(null)}
+        className="m-auto w-[calc(100%-2rem)] max-w-lg rounded-lg border border-current/20 bg-background p-6 text-foreground backdrop:bg-black/50"
+      >
+        {role && (
+          <div className="flex flex-col gap-5">
+            <div>
+              <h2 className="text-lg font-medium">{role} subjects</h2>
+              <p className="mt-1 text-sm opacity-60">
+                Pick what the questions should cover. Select nothing for a mix of everything.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {SUBJECTS[role].map((subject) => {
+                const on = subjects.includes(subject);
+                return (
+                  <button
+                    key={subject}
+                    onClick={() => toggle(subject)}
+                    aria-pressed={on}
+                    className={`rounded-full border px-3 py-1.5 text-sm transition ${
+                      on
+                        ? "border-current bg-current/10 font-medium"
+                        : "border-current/20 opacity-70 hover:opacity-100"
+                    }`}
+                  >
+                    {subject}
+                  </button>
+                );
+              })}
+            </div>
+
+            {error && (
+              <p role="alert" className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm">
+                {error}
+              </p>
+            )}
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={start}
+                disabled={loading}
+                className="rounded-lg border border-current/30 px-5 py-2 text-sm font-medium transition hover:border-current/60 disabled:opacity-40"
+              >
+                {loading ? "Generating questions…" : "Start interview"}
+              </button>
+              <button
+                onClick={() => dialog.current?.close()}
+                disabled={loading}
+                className="rounded-lg px-3 py-2 text-sm opacity-60 transition hover:opacity-100 disabled:opacity-30"
+              >
+                Cancel
+              </button>
+              <span className="ml-auto text-sm opacity-50">
+                {subjects.length || "all"} selected
+              </span>
+            </div>
+          </div>
+        )}
+      </dialog>
     </main>
   );
 }
