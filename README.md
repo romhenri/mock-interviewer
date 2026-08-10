@@ -1,7 +1,7 @@
 # Mock Interviewer
 
 Pick a role, answer three generated interview questions in two or three sentences each, get each
-answer scored 0–100 on correctness, clarity and depth by an LLM judge. Questions and scoring both run through
+answer scored 0–100 on correctness, English and depth by an LLM judge. Questions and scoring both run through
 [OpenRouter](https://openrouter.ai); the API key stays server-side.
 
 ```

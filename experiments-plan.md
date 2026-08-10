@@ -200,7 +200,7 @@ aggregate without a second pass over raw responses.
 
 One row per (judge_model, prompt_version):
 
-`mean_correctness`, `mean_clarity`, `mean_depth`, `stdev` per criterion, `mean_latency_ms`,
+`mean_correctness`, `mean_english`, `mean_depth`, `stdev` per criterion, `mean_latency_ms`,
 `parse_failures`, `n`.
 
 **The stdev columns are the answer.** Means tell you a model is generous; standard deviation across

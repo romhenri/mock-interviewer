@@ -1,6 +1,6 @@
 import type { Score, ScoreSlot } from "./types";
 
-export const CRITERIA = ["correctness", "clarity", "depth"] as const;
+export const CRITERIA = ["correctness", "english", "depth"] as const;
 
 export type Criterion = (typeof CRITERIA)[number];
 

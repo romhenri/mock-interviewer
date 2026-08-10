@@ -64,7 +64,7 @@ export default function RoleSelection() {
         <h1 className="text-3xl font-semibold">Agent Interviewer</h1>
         <p className="mt-2 text-sm opacity-70">
           Pick a role. You get {QUESTION_COUNT} questions, and each answer is scored on correctness,
-          clarity and depth.
+          English and depth.
         </p>
       </div>
 

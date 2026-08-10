@@ -68,12 +68,12 @@ export const scoreSchema = {
     type: "object",
     properties: {
       correctness: { type: "integer", minimum: 0, maximum: 100 },
-      clarity: { type: "integer", minimum: 0, maximum: 100 },
+      english: { type: "integer", minimum: 0, maximum: 100 },
       depth: { type: "integer", minimum: 0, maximum: 100 },
       feedback: { type: "string" },
       suggestedAnswer: { type: "string" },
     },
-    required: ["correctness", "clarity", "depth", "feedback", "suggestedAnswer"],
+    required: ["correctness", "english", "depth", "feedback", "suggestedAnswer"],
     additionalProperties: false,
   },
 };
@@ -93,16 +93,21 @@ said about the topic.
 
 Score the answer on three independent criteria, each from 0 to 100:
 - correctness: is what they said technically accurate? Penalise wrong claims, not gaps.
-- clarity: is it well structured and easy to follow? Judge the communication, not the content.
+- english: how well is it expressed in English? Judge grammar, word choice, idiom and fluency —
+  the language only, never the technical content. Many candidates are not native speakers; score
+  what would hold up in a real interview conducted in English. Understandable English with small
+  errors scores well; broken word order, wrong tenses or vocabulary that obscures the meaning
+  scores badly. Never lower this for a wrong or thin answer that is expressed in good English.
 - depth: did they name the mechanism that actually answers the question, or only restate it in
   other words? Penalise vagueness and hand-waving — never brevity. Two sentences that name the
   right mechanism score higher than a long answer that circles it.
 
-Score the criteria independently — a clear but wrong answer scores high on clarity and low on
-correctness. Judge only what the candidate actually said; do not credit knowledge they did not show.
+Score the criteria independently — a wrong answer in fluent English scores high on english and low
+on correctness, and a correct answer in broken English scores the reverse. Judge only what the candidate actually said; do not credit knowledge they did not show.
 
 Then write two or three sentences of feedback: what was strong, and the single most valuable thing
-they left out. Do not tell them to write more.
+they left out. If the English got in the way, say so concretely — quote the phrase and give the
+natural version. Do not tell them to write more.
 
 Finally, write suggestedAnswer: the answer you were scoring against. It must be a model answer to
 the question in ${ANSWER_LENGTH} — the same budget the candidate had, so they can see what a full

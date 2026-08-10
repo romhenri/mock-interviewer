@@ -1,4 +1,9 @@
-export const ROLES = ["AI Engineer", "Software Engineer"] as const;
+export const ROLES = [
+  "AI Engineer",
+  "Software Engineer",
+  "Front-end Engineer",
+  "Back-end Engineer",
+] as const;
 
 export type Role = (typeof ROLES)[number];
 
@@ -6,6 +11,8 @@ export type Role = (typeof ROLES)[number];
 export const ROLE_SUMMARY: Record<Role, string> = {
   "AI Engineer": "Builds products on top of models.",
   "Software Engineer": "Builds and runs the systems behind a product.",
+  "Front-end Engineer": "Builds the interface people actually touch.",
+  "Back-end Engineer": "Builds the services and data behind the interface.",
 };
 
 /** Ordered from least to most senior — the slider maps its value to an index here. */
@@ -60,11 +67,45 @@ export const SUBJECTS: Record<Role, readonly string[]> = {
     "Networking",
     "Version Control",
   ],
+  "Front-end Engineer": [
+    "HTML Semantics",
+    "CSS Layout",
+    "JavaScript",
+    "TypeScript",
+    "React",
+    "State Management",
+    "Rendering and Hydration",
+    "Accessibility",
+    "Browser Performance",
+    "Bundling",
+    "Forms and Validation",
+    "Caching and CDNs",
+    "Testing",
+    "Web Security",
+    "Responsive Design",
+  ],
+  "Back-end Engineer": [
+    "API Design",
+    "HTTP",
+    "Databases",
+    "SQL and Indexing",
+    "Transactions",
+    "Caching",
+    "Queues and Messaging",
+    "Concurrency",
+    "Authentication",
+    "Authorization",
+    "Scaling",
+    "Observability",
+    "Testing",
+    "Deployment",
+    "Error Handling",
+  ],
 };
 
 export type Score = {
   correctness: number;
-  clarity: number;
+  english: number;
   depth: number;
   feedback: string;
   suggestedAnswer: string;

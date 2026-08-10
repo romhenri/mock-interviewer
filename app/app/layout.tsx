@@ -19,7 +19,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Agent Interviewer",
-  description: "Practice interview questions, scored on correctness, clarity and depth.",
+  description: "Practice interview questions, scored on correctness, English and depth.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
