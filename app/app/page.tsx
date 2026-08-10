@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import { loadBookmarks, pickQuestions, REUSE_CHANCE } from "@/lib/bookmarks";
 import { QUESTION_COUNT } from "@/lib/prompts";
 import { saveSession } from "@/lib/session";
 import { DEFAULT_LEVEL, LEVELS, ROLE_SUMMARY, ROLES, SUBJECTS, type Role } from "@/lib/types";
@@ -43,7 +44,13 @@ export default function RoleSelection() {
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Could not generate questions.");
 
-      saveSession({ role, questions: body.questions, answers: [], scores: [] });
+      // Saved questions have a REUSE_CHANCE each of displacing a generated one.
+      const questions = pickQuestions(
+        body.questions,
+        loadBookmarks().filter((bookmark) => bookmark.role === role),
+        REUSE_CHANCE,
+      );
+      saveSession({ role, questions, answers: [], scores: [] });
       router.push("/interview");
     } catch (err) {
       setError((err as Error).message);

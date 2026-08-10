@@ -9,7 +9,7 @@ cp .env.local.example .env.local   # then set OPENROUTER_API_KEY=sk-or-v1-...
 
 ## Run
 ```bash
-npm run dev   # :3000
+npm run dev   # :4242
 ```
 
 ## Check

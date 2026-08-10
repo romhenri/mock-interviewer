@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import BookmarkButton from "@/components/BookmarkButton";
 import { averageScores, CRITERIA, isScore } from "@/lib/score";
 import { scoreAnswer, usePendingScores } from "@/lib/scoring";
 import { clearSession, loadSession, useSession } from "@/lib/session";
@@ -94,9 +95,16 @@ export default function Summary() {
 
           return (
             <article key={index} className={`rounded-lg border border-current/20 p-4 ${accent}`}>
-              <h3 className="text-sm font-medium">
-                {index + 1}. {question}
-              </h3>
+              <div className="flex items-start gap-3">
+                <h3 className="flex-1 text-sm font-medium">
+                  {index + 1}. {question}
+                </h3>
+                <BookmarkButton
+                  question={question}
+                  role={session!.role}
+                  suggestedAnswer={isScore(slot) ? slot.suggestedAnswer : undefined}
+                />
+              </div>
 
               {answer === undefined ? (
                 <p className="mt-3 text-sm opacity-50">Not reached.</p>

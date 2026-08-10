@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import BookmarkButton from "@/components/BookmarkButton";
 import { ANSWER_LENGTH } from "@/lib/prompts";
 import { scoreAnswer } from "@/lib/scoring";
 import { clearSession, loadSession, saveSession, useSession } from "@/lib/session";
@@ -73,13 +74,16 @@ export default function Interview() {
         </button>
       </header>
 
-      <h1 className="text-xl font-medium">{question}</h1>
+      <div className="flex items-start gap-3">
+        <h1 className="flex-1 text-xl font-medium">{question}</h1>
+        <BookmarkButton question={question} role={session.role} />
+      </div>
 
       <textarea
         value={answer}
         onChange={(event) => setAnswer(event.target.value)}
         rows={4}
-        placeholder={`Answer in ${ANSWER_LENGTH}…`}
+        placeholder={`Answer as you would out loud — ${ANSWER_LENGTH}, name the mechanism, don't pad it.`}
         className="w-full resize-y rounded-lg border border-current/20 bg-transparent p-3 font-sans text-sm"
       />
 

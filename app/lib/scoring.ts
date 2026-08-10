@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { attachSuggestedAnswer } from "./bookmarks.ts";
 import { saveScoreAt } from "./session.ts";
 
 /**
@@ -48,6 +49,8 @@ export async function scoreAnswer(index: number, question: string, answer: strin
     const body = await response.json();
     if (!response.ok) throw new Error(body.error ?? "The judge could not score this answer.");
     saveScoreAt(index, body.score);
+    // No-op unless this question is bookmarked, which it usually is not.
+    attachSuggestedAnswer(question, body.score.suggestedAnswer);
   } catch (error) {
     saveScoreAt(index, { error: (error as Error).message });
   } finally {
