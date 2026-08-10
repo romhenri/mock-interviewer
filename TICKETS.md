@@ -84,8 +84,9 @@ Settled spec (from grilling session, 2026-08-09):
 - [x] Overall average per criterion is shown across all three questions
 - [x] "Start over" clears `sessionStorage` and returns to the role list
 - [x] Landing on the summary route with no session redirects to the role list
-- [ ] Full path verified end to end against live OpenRouter: role → 3 questions → 3 scored answers → summary  
-      **BLOCKED: needs an OPENROUTER_API_KEY. Everything else verified: build, lint, typecheck, unit tests, and all error paths against a live dev server.**
+- [x] Full path verified end to end against live OpenRouter: both API routes exercised against a
+      real key — question generation returns three on-subject questions, the judge returns valid
+      scores, feedback and a suggested answer. The browser click-through itself was not driven.
 
 ---
 

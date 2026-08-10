@@ -2,6 +2,28 @@ export const ROLES = ["AI Engineer", "Software Engineer"] as const;
 
 export type Role = (typeof ROLES)[number];
 
+/** One line on what the role actually does, shown under its name on the cards. */
+export const ROLE_SUMMARY: Record<Role, string> = {
+  "AI Engineer": "Builds products on top of models.",
+  "Software Engineer": "Builds and runs the systems behind a product.",
+};
+
+/** Ordered from least to most senior — the slider maps its value to an index here. */
+export const LEVELS = [
+  "Rookie",
+  "Intern",
+  "Entry",
+  "Junior",
+  "Mid",
+  "Senior",
+  "Staff",
+  "Principal",
+] as const;
+
+export type Level = (typeof LEVELS)[number];
+
+export const DEFAULT_LEVEL: Level = "Mid";
+
 /** Subjects the candidate can narrow an interview to. Selecting none means "anything". */
 export const SUBJECTS: Record<Role, readonly string[]> = {
   "AI Engineer": [
@@ -46,6 +68,8 @@ export type Score = {
   depth: number;
   feedback: string;
   suggestedAnswer: string;
+  /** Which model actually judged — the chain falls back, so it varies. */
+  model?: string;
 };
 
 /** A scoring attempt that failed. Kept so the summary can say what went wrong. */

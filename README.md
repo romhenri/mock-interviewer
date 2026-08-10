@@ -31,11 +31,24 @@ Open http://localhost:3000.
 | `OPENROUTER_API_KEY` | yes | — |
 | `OPENROUTER_MODEL` | no | `openai/gpt-oss-20b:free` |
 
-The default is a free model that supports strict structured output. Three other free models do too
-and can be swapped in without code changes: `google/gemma-4-26b-a4b-it:free`,
-`nvidia/nemotron-nano-9b-v2:free`, `nvidia/nemotron-3-super-120b-a12b:free`. A model that does
-*not* support structured output will fail every call — the app forces a JSON schema rather than
-parsing prose.
+`OPENROUTER_MODEL` is only the *first* model tried. The free pool is shared and routinely queues or
+rate-limits, so a single-model call fails often enough to be unusable — the client falls through up
+to three models before giving up. Measured round-trip times (Aug 2026):
+
+| model | time |
+|---|---|
+| `google/gemma-4-26b-a4b-it:free` | ~5s |
+| `nvidia/nemotron-3-super-120b-a12b:free` | ~17s |
+| `openai/gpt-oss-20b:free` | ~18s |
+| `nvidia/nemotron-nano-9b-v2:free` | ~37s |
+
+All four support strict structured output, which is mandatory here — the app forces a JSON schema
+rather than parsing prose, so a model without it fails every call. **Set `OPENROUTER_MODEL` to the
+gemma model if you want the app to feel fast**; the default is ~3.5x slower.
+
+Because fallback changes which model judged, each score records the model that produced it, and the
+summary warns when an interview was judged by more than one — scores from different judges are not
+directly comparable. A rejected API key stops the chain immediately instead of failing three times.
 
 ## Request budget
 

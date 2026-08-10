@@ -6,6 +6,13 @@ import { averageScores, CRITERIA, isScore } from "@/lib/score";
 import { scoreAnswer, usePendingScores } from "@/lib/scoring";
 import { clearSession, loadSession, useSession } from "@/lib/session";
 
+/** Red below 40, amber up to 70, green above — same scale for numbers and borders. */
+function tone(value: number) {
+  if (value >= 70) return { text: "text-emerald-600 dark:text-emerald-400", border: "border-l-emerald-500" };
+  if (value >= 40) return { text: "text-amber-600 dark:text-amber-400", border: "border-l-amber-500" };
+  return { text: "text-red-600 dark:text-red-400", border: "border-l-red-500" };
+}
+
 export default function Summary() {
   const router = useRouter();
   const session = useSession();
@@ -23,6 +30,9 @@ export default function Summary() {
   const attempted = session.answers.filter((answer) => answer !== null).length;
   const averages = averageScores(session.scores);
   const stillScoring = pending.size > 0;
+  // Fallback can swap the judge mid-interview, which makes scores from
+  // different models no longer directly comparable.
+  const judges = [...new Set(session.scores.filter(isScore).map((s) => s.model).filter(Boolean))];
 
   function startOver() {
     clearSession();
@@ -57,12 +67,21 @@ export default function Summary() {
             {CRITERIA.map((criterion) => (
               <div key={criterion}>
                 <dt className="text-xs uppercase tracking-wide opacity-60">{criterion}</dt>
-                <dd className="text-3xl font-semibold tabular-nums">{averages[criterion]}</dd>
+                <dd className={`text-3xl font-semibold tabular-nums ${tone(averages[criterion]).text}`}>
+                  {averages[criterion]}
+                </dd>
               </div>
             ))}
           </dl>
         )}
       </section>
+
+      {judges.length > 1 && (
+        <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+          Answers were judged by different models ({judges.join(", ")}) because the primary was
+          unavailable. Scores from different judges are not directly comparable.
+        </p>
+      )}
 
       <section className="flex flex-col gap-4">
         <h2 className="text-xs uppercase tracking-wide opacity-60">Per question</h2>
@@ -70,8 +89,11 @@ export default function Summary() {
           const answer = session.answers[index];
           const slot = session.scores[index];
 
+          // The card is accented by correctness — the criterion that says right or wrong.
+          const accent = isScore(slot) ? `border-l-4 ${tone(slot.correctness).border}` : "";
+
           return (
-            <article key={index} className="rounded-lg border border-current/20 p-4">
+            <article key={index} className={`rounded-lg border border-current/20 p-4 ${accent}`}>
               <h3 className="text-sm font-medium">
                 {index + 1}. {question}
               </h3>
@@ -88,7 +110,9 @@ export default function Summary() {
                     {CRITERIA.map((criterion) => (
                       <div key={criterion} className="flex gap-2">
                         <dt className="capitalize opacity-60">{criterion}</dt>
-                        <dd className="font-semibold tabular-nums">{slot[criterion]}</dd>
+                        <dd className={`font-semibold tabular-nums ${tone(slot[criterion]).text}`}>
+                          {slot[criterion]}
+                        </dd>
                       </div>
                     ))}
                   </dl>
@@ -104,7 +128,11 @@ export default function Summary() {
                 </>
               ) : (
                 <div className="mt-3 flex flex-col items-start gap-2">
-                  <p className="text-sm opacity-70">
+                  <p
+                    className={
+                      slot === null ? "text-sm opacity-70" : "text-sm text-red-600 dark:text-red-400"
+                    }
+                  >
                     {slot === null ? "Not scored." : `Scoring failed: ${slot.error}`}
                   </p>
                   <button

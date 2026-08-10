@@ -19,8 +19,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await chatJSON(judgePrompt(question, answer), scoreSchema);
-    return Response.json({ score: parseScore(result) });
+    const { content, served } = await chatJSON(judgePrompt(question, answer), scoreSchema);
+    return Response.json({ score: { ...parseScore(content), model: served } });
   } catch (error) {
     // No retry and no fallback parsing: a score invented from a broken
     // response would be indistinguishable from a real one in the summary.

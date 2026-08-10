@@ -1,4 +1,4 @@
-import type { Role } from "./types";
+import type { Level, Role } from "./types";
 
 export const QUESTION_COUNT = 3;
 
@@ -23,15 +23,18 @@ export const questionsSchema = {
 export const ANSWER_LENGTH = "2–3 sentences";
 
 /** @param subjects narrows the questions; empty means the whole role is fair game. */
-export function questionsPrompt(role: Role, subjects: string[] = []): string {
+export function questionsPrompt(role: Role, level: Level, subjects: string[] = []): string {
   const coverage = subjects.length
     ? `Every question must be about one of these subjects: ${subjects.join(", ")}. Use a
   different subject from that list for each question where there are enough of them.`
     : `Cover ${QUESTION_COUNT} different areas of the role.`;
 
-  return `You are a senior technical interviewer hiring for a ${role} position.
+  return `You are a senior technical interviewer hiring for a ${level}-level ${role} position.
 
 Write exactly ${QUESTION_COUNT} interview questions for this role.
+
+Pitch every question at the ${level} level: ask what someone at that level is expected to know, and
+nothing beyond it. A ${level} candidate who knows their job should be able to answer all three.
 
 The candidate answers out loud, in ${ANSWER_LENGTH}. Every question must be fully
 answerable in that space by someone who knows the material.

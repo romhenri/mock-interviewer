@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Mock Interviewer",
+  title: "Agent Interviewer",
   description: "Practice interview questions, scored on correctness, clarity and depth.",
 };
 
