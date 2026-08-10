@@ -42,8 +42,9 @@ parsing prose.
 OpenRouter's free tier allows **20 requests/minute and 50 requests/day** without credits. It rises
 to 1000/day once you have purchased $10 of credits at any point.
 
-One interview costs **4 requests** — one to generate the three questions, one per answer scored.
-That is roughly **12 interviews per day** on the free tier.
+One interview costs **1 request to generate the questions, plus 1 per answer you submit** — so 4 at
+most, and roughly **12 interviews per day** on the free tier. Skipping a question makes no call, so
+an interview where you skip everything costs the single generation request.
 
 ## How it works
 
@@ -51,8 +52,11 @@ That is roughly **12 interviews per day** on the free tier.
    questions.
 2. `/interview` — one question at a time. Submit an answer and `/api/score-answer` returns
    `{ correctness, clarity, depth, feedback }`. Scores show immediately, then you move on.
-   Forward-only: submitted answers are final and there is no going back.
+   Forward-only: submitted answers are final and there is no going back. **Skip question** records
+   the skip and advances without calling the judge.
 3. `/summary` — every question with its three scores and feedback, plus the average per criterion.
+   Skipped questions are listed as skipped and excluded from the averages entirely — counting them
+   as zero would make skipping look identical to answering wrongly.
 
 The whole session lives in `sessionStorage` under `mock-interview-session`. There is no database
 and no account. Closing the tab ends the interview.

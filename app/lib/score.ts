@@ -31,12 +31,18 @@ export function parseScore(raw: unknown): Score {
   return { ...scores, feedback: candidate.feedback };
 }
 
-/** Mean of each criterion across every scored answer, rounded to whole points. */
-export function averageScores(scores: Score[]): Record<Criterion, number> {
+/**
+ * Mean of each criterion across every scored answer, rounded to whole points.
+ * Skipped questions are stored as null and are excluded from both the total and
+ * the divisor — counting them as zero would punish skipping as if it were a
+ * wrong answer.
+ */
+export function averageScores(scores: (Score | null)[]): Record<Criterion, number> {
+  const answered = scores.filter((score) => score !== null);
   const averages = {} as Record<Criterion, number>;
   for (const criterion of CRITERIA) {
-    const total = scores.reduce((sum, score) => sum + score[criterion], 0);
-    averages[criterion] = scores.length ? Math.round(total / scores.length) : 0;
+    const total = answered.reduce((sum, score) => sum + score[criterion], 0);
+    averages[criterion] = answered.length ? Math.round(total / answered.length) : 0;
   }
   return averages;
 }

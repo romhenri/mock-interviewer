@@ -66,6 +66,20 @@ export default function Interview() {
     setScore(null);
   }
 
+  /** Records the skip and moves on without calling the judge — costs no request. */
+  function skip() {
+    const current = loadSession();
+    if (!current) return;
+    saveSession({
+      ...current,
+      answers: [...current.answers, null],
+      scores: [...current.scores, null],
+    });
+    setAnswer("");
+    setError(null);
+    if (isLast) router.push("/summary");
+  }
+
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-6">
       <header className="text-sm opacity-60">
@@ -84,13 +98,22 @@ export default function Interview() {
       />
 
       {score === null ? (
-        <button
-          onClick={submit}
-          disabled={!answer.trim() || scoring}
-          className="self-start rounded-lg border border-current/30 px-5 py-2 text-sm font-medium transition hover:border-current/60 disabled:opacity-40"
-        >
-          {scoring ? "Scoring…" : "Submit answer"}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={submit}
+            disabled={!answer.trim() || scoring}
+            className="rounded-lg border border-current/30 px-5 py-2 text-sm font-medium transition hover:border-current/60 disabled:opacity-40"
+          >
+            {scoring ? "Scoring…" : "Submit answer"}
+          </button>
+          <button
+            onClick={skip}
+            disabled={scoring}
+            className="rounded-lg px-3 py-2 text-sm opacity-60 transition hover:opacity-100 disabled:opacity-30"
+          >
+            Skip question
+          </button>
+        </div>
       ) : (
         <section className="flex flex-col gap-4 rounded-lg border border-current/20 p-4">
           <dl className="grid grid-cols-3 gap-3 text-center">

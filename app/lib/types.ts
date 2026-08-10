@@ -9,10 +9,14 @@ export type Score = {
   feedback: string;
 };
 
-/** Answers and scores are appended in lockstep: index i belongs to questions[i]. */
+/**
+ * Answers and scores are appended in lockstep: index i belongs to questions[i].
+ * A skipped question appends null to both, so the indices stay aligned without
+ * a separate list of which questions were skipped.
+ */
 export type Session = {
   role: Role;
   questions: string[];
-  answers: string[];
-  scores: Score[];
+  answers: (string | null)[];
+  scores: (Score | null)[];
 };

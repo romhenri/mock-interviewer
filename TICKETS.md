@@ -105,6 +105,27 @@ Settled spec (from grilling session, 2026-08-09):
 
 ---
 
+## 06 — Skip a question
+
+**Blocked by:** 03, 04 (added after the original batch)
+
+**What to build:** The candidate can move past a question without answering it, and doing so costs
+no API request. Skipped questions appear in the summary as skipped rather than as a zero.
+
+**Status:** done
+
+- [x] "Skip question" on the interview page records the skip and advances
+- [x] Skipping makes **no** call to `/api/score-answer` — an all-skipped interview spends only the
+      one generation request
+- [x] Session stores a skip as `null` in both `answers` and `scores`, keeping the indices in lockstep
+- [x] Summary lists skipped questions as skipped, with no scores or feedback
+- [x] Skipped questions are excluded from the per-criterion averages — not counted as zero
+- [x] Summary header shows answered vs. skipped counts
+- [x] An interview where every question was skipped still reaches the summary and says so, instead
+      of showing three zeroes
+
+---
+
 ## Notes carried from the grilling session
 
 - `meta-llama/llama-3.1-8b-instruct:free` **no longer exists** on OpenRouter — there is no free Llama and no free Mistral. Any plan naming them needs rewriting against the current 14-model free tier.

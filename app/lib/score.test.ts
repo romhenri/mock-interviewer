@@ -27,3 +27,17 @@ test("averageScores means each criterion independently", () => {
 test("averageScores does not divide by zero on an empty interview", () => {
   assert.deepEqual(averageScores([]), { correctness: 0, clarity: 0, depth: 0 });
 });
+
+test("averageScores ignores skipped questions instead of scoring them zero", () => {
+  const perfect = { correctness: 100, clarity: 100, depth: 100, feedback: "x" };
+  // One answered, two skipped: the average is the answered one, not a third of it.
+  assert.deepEqual(averageScores([null, perfect, null]), {
+    correctness: 100,
+    clarity: 100,
+    depth: 100,
+  });
+});
+
+test("averageScores returns zeroes when every question was skipped", () => {
+  assert.deepEqual(averageScores([null, null]), { correctness: 0, clarity: 0, depth: 0 });
+});
