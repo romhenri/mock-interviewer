@@ -19,7 +19,11 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { content, served } = await chatJSON(judgePrompt(question, answer), scoreSchema);
+    const { content, served } = await chatJSON(
+      judgePrompt(question, answer),
+      scoreSchema,
+      request.headers.get("x-openrouter-key") ?? undefined,
+    );
     return Response.json({ score: { ...parseScore(content), model: served } });
   } catch (error) {
     // No retry and no fallback parsing: a score invented from a broken

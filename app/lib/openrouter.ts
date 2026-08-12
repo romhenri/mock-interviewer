@@ -47,8 +47,9 @@ function modelChain(): string[] {
 export async function chatJSON(
   prompt: string,
   schema: { name: string; schema: object },
+  userApiKey?: string,
 ): Promise<{ content: unknown; served: string }> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = userApiKey || process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
     throw new Error(
       "OPENROUTER_API_KEY is not set. Copy app/.env.local.example to app/.env.local and add your key.",

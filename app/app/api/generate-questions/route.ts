@@ -27,6 +27,7 @@ export async function POST(request: Request) {
     const { content, served } = await chatJSON(
       questionsPrompt(role as Role, level as Level, chosen),
       questionsSchema,
+      request.headers.get("x-openrouter-key") ?? undefined,
     );
     const questions = (content as { questions?: unknown })?.questions;
 

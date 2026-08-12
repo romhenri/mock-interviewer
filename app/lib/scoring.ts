@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { loadApiKey } from "./apiKey.ts";
 import { attachSuggestedAnswer } from "./bookmarks.ts";
 import { saveScoreAt } from "./session.ts";
 
@@ -41,9 +42,13 @@ export async function scoreAnswer(index: number, question: string, answer: strin
   notify();
 
   try {
+    const apiKey = loadApiKey();
     const response = await fetch("/api/score-answer", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(apiKey ? { "x-openrouter-key": apiKey } : {}),
+      },
       body: JSON.stringify({ question, answer }),
     });
     const body = await response.json();
