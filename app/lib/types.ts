@@ -3,6 +3,8 @@ export const ROLES = [
   "Software Engineer",
   "Front-end Engineer",
   "Back-end Engineer",
+  "DevOps",
+  "Infra",
 ] as const;
 
 export type Role = (typeof ROLES)[number];
@@ -13,6 +15,8 @@ export const ROLE_SUMMARY: Record<Role, string> = {
   "Software Engineer": "Builds and runs the systems behind a product.",
   "Front-end Engineer": "Builds the interface people actually touch.",
   "Back-end Engineer": "Builds the services and data behind the interface.",
+  "DevOps": "Builds the pipelines and automation that ship the product.",
+  "Infra": "Builds and runs the platform everything else sits on.",
 };
 
 /** Ordered from least to most senior — the slider maps its value to an index here. */
@@ -100,6 +104,40 @@ export const SUBJECTS: Record<Role, readonly string[]> = {
     "Testing",
     "Deployment",
     "Error Handling",
+  ],
+  "DevOps": [
+    "CI/CD",
+    "Containers",
+    "Kubernetes",
+    "Infrastructure as Code",
+    "Configuration Management",
+    "Monitoring and Alerting",
+    "Logging",
+    "Release Management",
+    "Automation",
+    "Cloud Platforms",
+    "Networking",
+    "Secrets Management",
+    "Incident Response",
+    "Scaling",
+    "Version Control",
+  ],
+  "Infra": [
+    "Networking",
+    "Cloud Platforms",
+    "Kubernetes",
+    "Infrastructure as Code",
+    "Load Balancing",
+    "DNS",
+    "Storage Systems",
+    "Compute Provisioning",
+    "Observability",
+    "Disaster Recovery",
+    "Security and Access Control",
+    "Capacity Planning",
+    "Service Mesh",
+    "Cost Optimization",
+    "Automation",
   ],
 };
 
