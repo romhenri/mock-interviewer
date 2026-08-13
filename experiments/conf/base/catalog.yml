@@ -1,0 +1,10 @@
+# Intentionally empty: every dataset in the generate pipeline is a MemoryDataset.
+#
+# Results are not stored through the catalog. Kedro's `versioned: true` writes one
+# timestamped directory per dataset per run, and the whole point of this experiment is to
+# compare any run against any future run — which is a group-by over one flat file, and a
+# directory crawl over versioned datasets. So `persist_run` appends to data/questions.jsonl
+# and writes data/runs/<run_id>/manifest.yml directly (see src/question_experiments/store.py).
+#
+# Kedro is here for the DAG, the parameters and room for the next experiment (prompt-version
+# sweeps, repeat sampling), not for its I/O layer.

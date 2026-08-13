@@ -1,0 +1,41 @@
+experiment:
+  role: "AI Engineer"
+  level: "Mid"
+
+  # One question per subject, so this list also sets the question count. All 15 AI Engineer
+  # subjects, copied from app/lib/types.ts. Every model gets this same assignment — that is
+  # what makes two models' output comparable question by question.
+  #
+  # Editing this list changes config_hash, and metrics.py will refuse to pool the new runs
+  # with the old ones. That is deliberate: they measured different tasks.
+  subjects:
+    - RNNs
+    - CNNs
+    - Transformers
+    - Attention
+    - Tokenization
+    - Embeddings
+    - Vector Search
+    - RAG
+    - Fine-tuning
+    - Prompt Engineering
+    - Evaluation
+    - Diffusion Models
+    - Reinforcement Learning
+    - Inference Optimization
+    - Training Infrastructure
+
+  # Every free OpenRouter model that supports strict structured output (checked Aug 2026).
+  # One request each, so a full run costs 5 of the free tier's 50 requests/day and produces
+  # 75 questions to rate. lfm-2.5-2.6b is in for a reason: it is the weakest of the five, so
+  # if it does not rate below the rest, the 1–5 scale is not discriminating and the ratings
+  # are not worth collecting.
+  #
+  # The free tier turns over — re-check before trusting this list:
+  #   curl -s https://openrouter.ai/api/v1/models
+  models:
+    - "google/gemma-4-26b-a4b-it:free"
+    - "nvidia/nemotron-3-super-120b-a12b:free"
+    - "openai/gpt-oss-20b:free"
+    - "nvidia/nemotron-nano-9b-v2:free"
+    - "liquid/lfm-2.5-2.6b:free"

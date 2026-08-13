@@ -7,7 +7,7 @@ answer scored 0–100 on correctness, English and depth by an LLM judge. Questio
 ```
 mock-interviewer/
 ├── app/                  Next.js app — the thing you run
-├── experiments-plan.md   Kedro pipeline design (not built)
+├── experiments/          Kedro pipeline measuring question quality
 └── TICKETS.md            the work, as a checklist
 ```
 
@@ -109,11 +109,11 @@ of it before hosting it anywhere public.
 
 ## Experiments
 
-`experiments-plan.md` designs a Kedro pipeline for comparing free OpenRouter models and judge
-prompt versions — which model is the most *consistent* judge, and whether an explicit rubric
-reduces score variance.
+`experiments/` is a Kedro pipeline measuring **question quality**, the thing this product lives or
+dies on. Every free OpenRouter model writes questions for the same 15-subject assignment, a human
+rates each one 1–5 blind, and results accumulate so any run can be compared with any future run.
 
-**It is a design document. The pipeline is not built and has never been run.** It carries the
-request-budget arithmetic (a full four-model grid costs 56 calls against a 50/day cap), the catalog
-and parameter sketches, and the open questions — most importantly that measuring judge consistency
-properly needs the same answer scored repeatedly, which multiplies the request count.
+It is isolated from the app — its own venv, its own key, its own copy of the prompt. It never
+imports from `app/`, so a finding reaches production only when someone hand-ports it into
+`app/lib/prompts.ts`. A full run costs 5 requests against the 50/day cap; the real cost is the
+15–25 minutes of human rating. See [experiments/README.md](experiments/README.md).
