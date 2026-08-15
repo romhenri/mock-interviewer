@@ -141,6 +141,12 @@ export const SUBJECTS: Record<Role, readonly string[]> = {
   ],
 };
 
+/**
+ * A question and the full-credit answer written in the same generation call.
+ * `answer` is absent only on bookmarks saved before their question was scored.
+ */
+export type GeneratedQuestion = { question: string; answer?: string };
+
 export type Score = {
   correctness: number;
   english: number;
@@ -161,10 +167,15 @@ export type ScoreSlot = Score | ScoreError | null;
  * Answers and scores are appended in lockstep: index i belongs to questions[i].
  * A skipped question appends null to both, so the indices stay aligned without
  * a separate list of which questions were skipped.
+ *
+ * `references` is filled at generation time and never grows: it is the full-credit
+ * answer the judge scores questions[i] against. null where there is none — a reused
+ * bookmark saved before answers came with the question.
  */
 export type Session = {
   role: Role;
   questions: string[];
+  references: (string | null)[];
   answers: (string | null)[];
   scores: ScoreSlot[];
 };

@@ -2,6 +2,11 @@ import type { Level, Role } from "./types";
 
 export const QUESTION_COUNT = 3;
 
+/**
+ * Each item carries the model answer alongside the question. Writing it here costs
+ * nothing extra — the generator already knows what it is asking — and it gives the
+ * judge a reference to score against instead of inventing one per answer.
+ */
 export const questionsSchema = {
   name: "interview_questions",
   schema: {
@@ -9,7 +14,12 @@ export const questionsSchema = {
     properties: {
       questions: {
         type: "array",
-        items: { type: "string" },
+        items: {
+          type: "object",
+          properties: { question: { type: "string" }, answer: { type: "string" } },
+          required: ["question", "answer"],
+          additionalProperties: false,
+        },
         minItems: QUESTION_COUNT,
         maxItems: QUESTION_COUNT,
       },
@@ -31,7 +41,8 @@ export function questionsPrompt(role: Role, level: Level, subjects: string[] = [
 
   return `You are a senior technical interviewer hiring for a ${level}-level ${role} position.
 
-Write exactly ${QUESTION_COUNT} interview questions for this role.
+Write exactly ${QUESTION_COUNT} interview questions for this role, each with the answer you
+would accept as full credit.
 
 Pitch every question at the ${level} level: ask what someone at that level is expected to know, and
 nothing beyond it. A ${level} candidate who knows their job should be able to answer all three.
@@ -49,6 +60,13 @@ Rules:
 - No code, no diagrams, no "walk me through your experience with…" biography questions.
 - Return only the questions, with no numbering or preamble.
 
+For every question, also write the answer. It is the answer you would give full credit to,
+and it must fit the same ${ANSWER_LENGTH} the candidate has — it shows what a complete answer
+looks like at that length. Write it the way a candidate would say it out loud, not as advice
+about what to say. Name the actual mechanism; an answer that restates the question in other
+words is not a full-credit answer. A question whose own answer comes out vague is a bad
+question — replace it.
+
 Good examples of the shape and scope:
 - "Reverse Proxy: What is the primary function of a reverse proxy in a system architecture?"
 - "Cache Invalidation: What is a cache stampede, and what triggers it?"
@@ -62,35 +80,54 @@ Bad — too broad to answer in ${ANSWER_LENGTH}:
   trade-offs between them?"`;
 }
 
-export const scoreSchema = {
-  name: "answer_score",
-  schema: {
-    type: "object",
-    properties: {
-      correctness: { type: "integer", minimum: 0, maximum: 100 },
-      english: { type: "integer", minimum: 0, maximum: 100 },
-      depth: { type: "integer", minimum: 0, maximum: 100 },
-      feedback: { type: "string" },
-      suggestedAnswer: { type: "string" },
-    },
-    required: ["correctness", "english", "depth", "feedback", "suggestedAnswer"],
-    additionalProperties: false,
-  },
-};
+/**
+ * @param withSuggestedAnswer only when the question came without a reference answer —
+ * old bookmarks predate them. Asking for one the caller already has wastes tokens on
+ * output nobody reads.
+ */
+export function scoreSchema(withSuggestedAnswer: boolean) {
+  const criteria = { type: "integer", minimum: 0, maximum: 100 };
+  const suggested = withSuggestedAnswer ? { suggestedAnswer: { type: "string" } } : {};
 
-export function judgePrompt(question: string, answer: string): string {
+  return {
+    name: "answer_score",
+    schema: {
+      type: "object",
+      properties: {
+        correctness: criteria,
+        english: criteria,
+        depth: criteria,
+        feedback: { type: "string" },
+        ...suggested,
+      },
+      required: ["correctness", "english", "depth", "feedback", ...Object.keys(suggested)],
+      additionalProperties: false,
+    },
+  };
+}
+
+/** @param reference the full-credit answer written when the question was generated. */
+export function judgePrompt(question: string, answer: string, reference?: string | null): string {
   return `You are a strict but fair technical interviewer scoring a candidate's spoken answer.
 
 QUESTION:
 ${question}
-
+${reference ? `\nFULL-CREDIT ANSWER (written by the interviewer who set the question):\n${reference}\n` : ""}
 CANDIDATE'S ANSWER:
 ${answer}
 
 This is a spoken answer of ${ANSWER_LENGTH}, not an essay. A complete answer is short. Judge it
 against what a strong candidate could say in that time, never against everything that could be
 said about the topic.
-
+${
+  reference
+    ? `
+The full-credit answer above is the bar. An answer that reaches it scores 100 — nothing beyond it
+is required. Wording need not match: credit the same mechanism said differently, and credit a
+correct point the full-credit answer happens to miss.
+`
+    : ""
+}
 Score the answer on three independent criteria, each from 0 to 100:
 - correctness: is what they said technically accurate? Penalise wrong claims, not gaps.
 - english: how well is it expressed in English? Judge grammar, word choice, idiom and fluency —
@@ -108,9 +145,13 @@ on correctness, and a correct answer in broken English scores the reverse. Judge
 Then write two or three sentences of feedback: what was strong, and the single most valuable thing
 they left out. If the English got in the way, say so concretely — quote the phrase and give the
 natural version. Do not tell them to write more.
-
+${
+  reference
+    ? ""
+    : `
 Finally, write suggestedAnswer: the answer you were scoring against. It must be a model answer to
 the question in ${ANSWER_LENGTH} — the same budget the candidate had, so they can see what a full
 credit answer looks like at that length. Write it as a candidate would say it, not as advice about
-what to say. Do not mention the candidate or their answer in it.`;
+what to say. Do not mention the candidate or their answer in it.`
+}`;
 }

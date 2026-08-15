@@ -89,5 +89,11 @@ export function parse(raw: string | null): Session | null {
     Array.isArray(candidate.answers) &&
     Array.isArray(candidate.scores);
 
-  return wellFormed ? (candidate as Session) : null;
+  if (!wellFormed) return null;
+  // A session stored before questions came with answers has no references. It is
+  // still playable — those questions just get judged without a bar.
+  return {
+    ...(candidate as Session),
+    references: Array.isArray(candidate.references) ? candidate.references : [],
+  };
 }

@@ -25,9 +25,16 @@ test("parseScore rejects missing or non-numeric criteria", () => {
   assert.throws(() => parseScore(null), /score object/);
 });
 
-test("parseScore requires a suggested answer", () => {
+test("parseScore requires a suggested answer when the judge had no reference", () => {
   assert.throws(() => parseScore({ ...valid, suggestedAnswer: "" }), /suggested answer/);
   assert.throws(() => parseScore({ ...valid, suggestedAnswer: undefined }), /suggested answer/);
+});
+
+test("parseScore shows the reference answer the judge scored against", () => {
+  // With a reference the judge is not asked to write one, so the field is absent.
+  const withReference = { ...valid, suggestedAnswer: undefined };
+  const reference = "It terminates client connections on behalf of the backends.";
+  assert.deepEqual(parseScore(withReference, reference), { ...valid, suggestedAnswer: reference });
 });
 
 test("averageScores means each criterion independently", () => {

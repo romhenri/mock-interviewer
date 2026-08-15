@@ -30,7 +30,6 @@ Open http://localhost:4242.
 |---|---|---|
 | `OPENROUTER_API_KEY` | yes | — |
 | `OPENROUTER_MODEL` | no | `openai/gpt-oss-20b:free` |
-| `NEXT_PUBLIC_REUSE_CHANCE` | no | `0.2` |
 
 `OPENROUTER_MODEL` is only the *first* model tried. The free pool is shared and routinely queues or
 rate-limits, so a single-model call fails often enough to be unusable — the client falls through up
@@ -75,10 +74,10 @@ an interview where you skip everything costs the single generation request.
    flight, are labelled as such and can be scored from a button rather than silently retried.
 
 The bookmark icon beside a question saves it to `localStorage` under `mock-interview-bookmarks`,
-along with its topic label, the role, and — once scoring finishes — the suggested answer. When a
-new interview is generated, each question has a `NEXT_PUBLIC_REUSE_CHANCE` probability of being
-replaced by a saved one for that role, so material you flagged comes back. A saved question is
-never used twice in the same interview, and never displaces an identical one.
+along with its topic label, the role, and the full-credit answer the question was generated with.
+Settings → **Questions source** decides where a new interview draws from: *Complete generation*
+asks the model for a fresh set, *Only cache* draws from your bookmarks for that role and spends no
+request at all. A saved question is never used twice in the same interview.
 
 The interview session itself lives in `sessionStorage` under `mock-interview-session`. There is no
 database and no account. Closing the tab ends the interview; bookmarks outlive it.

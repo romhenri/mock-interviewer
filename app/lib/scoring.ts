@@ -1,9 +1,9 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { loadApiKey } from "./apiKey.ts";
 import { attachSuggestedAnswer } from "./bookmarks.ts";
 import { saveScoreAt } from "./session.ts";
+import { openRouterHeaders } from "./settings.ts";
 
 /**
  * Indices with a judge call in flight. Ephemeral on purpose: it is not stored,
@@ -36,20 +36,21 @@ export function usePendingScores(): Set<number> {
  * them and offers a retry, which keeps the "never spend a request without the
  * human asking" rule while letting the run continue unattended.
  */
-export async function scoreAnswer(index: number, question: string, answer: string): Promise<void> {
+export async function scoreAnswer(
+  index: number,
+  question: string,
+  answer: string,
+  reference: string | null,
+): Promise<void> {
   if (inFlight.has(index)) return;
   inFlight.add(index);
   notify();
 
   try {
-    const apiKey = loadApiKey();
     const response = await fetch("/api/score-answer", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(apiKey ? { "x-openrouter-key": apiKey } : {}),
-      },
-      body: JSON.stringify({ question, answer }),
+      headers: { "Content-Type": "application/json", ...openRouterHeaders() },
+      body: JSON.stringify({ question, answer, reference }),
     });
     const body = await response.json();
     if (!response.ok) throw new Error(body.error ?? "The judge could not score this answer.");

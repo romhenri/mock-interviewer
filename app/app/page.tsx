@@ -3,10 +3,34 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { clearApiKey, loadApiKey, saveApiKey } from "@/lib/apiKey";
-import { loadBookmarks, pickQuestions, REUSE_CHANCE } from "@/lib/bookmarks";
+import {
+  loadBookmarks,
+  pickCached,
+  pickQuestions,
+  REUSE_CHANCE,
+  type Bookmark,
+} from "@/lib/bookmarks";
+import { FREE_MODELS, modelLabel } from "@/lib/models";
 import { QUESTION_COUNT } from "@/lib/prompts";
 import { saveSession } from "@/lib/session";
-import { DEFAULT_LEVEL, LEVELS, ROLE_SUMMARY, ROLES, SUBJECTS, type Role } from "@/lib/types";
+import {
+  DEFAULT_SETTINGS,
+  loadSettings,
+  openRouterHeaders,
+  saveSettings,
+  SOURCES,
+  type Settings,
+  type Source,
+} from "@/lib/settings";
+import {
+  DEFAULT_LEVEL,
+  LEVELS,
+  ROLE_SUMMARY,
+  ROLES,
+  SUBJECTS,
+  type GeneratedQuestion,
+  type Role,
+} from "@/lib/types";
 
 export default function RoleSelection() {
   const router = useRouter();
@@ -18,6 +42,14 @@ export default function RoleSelection() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [apiKeyInput, setApiKeyInput] = useState("");
+  const settingsDialog = useRef<HTMLDialogElement>(null);
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+
+  /** Read on open, not on mount: localStorage is not there during the server render. */
+  function openSettings() {
+    setSettings(loadSettings());
+    settingsDialog.current?.showModal();
+  }
 
   function openKeyDialog() {
     setApiKeyInput(loadApiKey() ?? "");
@@ -50,30 +82,40 @@ export default function RoleSelection() {
     setLoading(true);
     setError(null);
     try {
-      const apiKey = loadApiKey();
-      const response = await fetch("/api/generate-questions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(apiKey ? { "x-openrouter-key": apiKey } : {}),
-        },
-        body: JSON.stringify({ role, level: LEVELS[levelIndex], subjects }),
-      });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error ?? "Could not generate questions.");
+      const { source } = loadSettings();
+      const saved = loadBookmarks().filter((bookmark) => bookmark.role === role);
+      const picked = source === "cache" ? pickCached(saved, QUESTION_COUNT) : await generate(saved);
 
-      // Saved questions have a REUSE_CHANCE each of displacing a generated one.
-      const questions = pickQuestions(
-        body.questions,
-        loadBookmarks().filter((bookmark) => bookmark.role === role),
-        REUSE_CHANCE,
-      );
-      saveSession({ role, questions, answers: [], scores: [] });
+      if (picked.length === 0) {
+        throw new Error(`No saved ${role} questions yet — bookmark some, or change the source.`);
+      }
+      saveSession({
+        role,
+        questions: picked.map((item) => item.question),
+        references: picked.map((item) => item.answer ?? null),
+        answers: [],
+        scores: [],
+      });
       router.push("/interview");
     } catch (err) {
       setError((err as Error).message);
       setLoading(false);
     }
+  }
+
+  /** The generating sources. "mixed" lets saved questions displace generated ones. */
+  async function generate(saved: Bookmark[]): Promise<GeneratedQuestion[]> {
+    const response = await fetch("/api/generate-questions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...openRouterHeaders() },
+      body: JSON.stringify({ role, level: LEVELS[levelIndex], subjects }),
+    });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error ?? "Could not generate questions.");
+
+    return loadSettings().source === "mixed"
+      ? pickQuestions(body.questions, saved, REUSE_CHANCE)
+      : body.questions;
   }
 
   return (
@@ -103,6 +145,13 @@ export default function RoleSelection() {
           </button>
         ))}
       </div>
+
+      <button
+        onClick={openSettings}
+        className="self-center text-sm underline underline-offset-4 opacity-60 transition hover:opacity-100"
+      >
+        Settings
+      </button>
 
       <dialog
         ref={dialog}
@@ -193,6 +242,81 @@ export default function RoleSelection() {
             </div>
           </div>
         )}
+      </dialog>
+
+      <dialog
+        ref={settingsDialog}
+        className="m-auto w-[calc(100%-2rem)] max-w-md rounded-lg border border-current/20 bg-background p-6 text-foreground backdrop:bg-black/50"
+      >
+        <div className="flex flex-col gap-5">
+          <div>
+            <h2 className="text-lg font-medium">Settings</h2>
+            <p className="mt-1 text-sm opacity-60">
+              Stored in this browser, applied to the next interview.
+            </p>
+          </div>
+
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="opacity-60">Priority model</span>
+            <select
+              value={settings.model ?? ""}
+              onChange={(event) =>
+                setSettings({ ...settings, model: event.target.value || null })
+              }
+              className="rounded-lg border border-current/20 bg-transparent px-3 py-2 text-sm"
+            >
+              <option value="">Fastest available (default)</option>
+              {FREE_MODELS.map((model) => (
+                <option key={model} value={model}>
+                  {modelLabel(model)}
+                </option>
+              ))}
+            </select>
+            <span className="text-xs opacity-50">
+              Tried first. The others still cover for it when the free pool rate-limits.
+            </span>
+          </label>
+
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="opacity-60">Questions source</span>
+            <select
+              value={settings.source}
+              onChange={(event) =>
+                setSettings({ ...settings, source: event.target.value as Source })
+              }
+              className="rounded-lg border border-current/20 bg-transparent px-3 py-2 text-sm"
+            >
+              {Object.entries(SOURCES).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+              {/* Listed so the plan is visible, disabled until it exists. */}
+              <option disabled>Ground truth (not implemented yet)</option>
+            </select>
+            <span className="text-xs opacity-50">
+              Only cache draws from bookmarked questions and spends no request.
+            </span>
+          </label>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => settingsDialog.current?.close()}
+              className="mr-auto rounded-lg px-3 py-2 text-sm opacity-60 transition hover:opacity-100"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                saveSettings(settings);
+                settingsDialog.current?.close();
+              }}
+              className="rounded-lg border border-current/30 px-5 py-2 text-sm font-medium transition hover:border-current/60"
+            >
+              Save
+            </button>
+          </div>
+        </div>
       </dialog>
 
       <dialog

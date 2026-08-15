@@ -89,6 +89,7 @@ export default function Summary() {
         {session.questions.map((question, index) => {
           const answer = session.answers[index];
           const slot = session.scores[index];
+          const reference = session.references[index] ?? null;
 
           // The card is accented by correctness — the criterion that says right or wrong.
           const accent = isScore(slot) ? `border-l-4 ${tone(slot.correctness).border}` : "";
@@ -102,14 +103,28 @@ export default function Summary() {
                 <BookmarkButton
                   question={question}
                   role={session!.role}
-                  suggestedAnswer={isScore(slot) ? slot.suggestedAnswer : undefined}
+                  suggestedAnswer={reference ?? (isScore(slot) ? slot.suggestedAnswer : undefined)}
                 />
               </div>
 
               {answer === undefined ? (
                 <p className="mt-3 text-sm opacity-50">Not reached.</p>
               ) : answer === null ? (
-                <p className="mt-3 text-sm opacity-50">Skipped — not answered, not scored.</p>
+                <>
+                  <p className="mt-3 text-sm opacity-50">Skipped — not answered, not scored.</p>
+                  {/* The answer was written with the question, so a skip still gets
+                      to see it — no scoring request needed. */}
+                  {reference && (
+                    <details className="mt-3">
+                      <summary className="cursor-pointer text-sm opacity-60 hover:opacity-100">
+                        Suggested answer
+                      </summary>
+                      <p className="mt-2 rounded-lg border border-current/15 p-3 text-sm opacity-80">
+                        {reference}
+                      </p>
+                    </details>
+                  )}
+                </>
               ) : pending.has(index) ? (
                 <p className="mt-3 text-sm opacity-60">Scoring…</p>
               ) : isScore(slot) ? (
@@ -144,7 +159,7 @@ export default function Summary() {
                     {slot === null ? "Not scored." : `Scoring failed: ${slot.error}`}
                   </p>
                   <button
-                    onClick={() => scoreAnswer(index, question, answer)}
+                    onClick={() => scoreAnswer(index, question, answer, reference)}
                     className="rounded-lg border border-current/30 px-3 py-1.5 text-sm transition hover:border-current/60"
                   >
                     Score this answer

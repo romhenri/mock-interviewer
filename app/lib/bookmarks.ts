@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { ROLES, type Role } from "./types.ts";
+import { ROLES, type GeneratedQuestion, type Role } from "./types.ts";
 
 const BOOKMARKS_KEY = "mock-interview-bookmarks";
 
@@ -20,7 +20,8 @@ export type Bookmark = {
   role: Role;
   /** The "Topic:" label the generator prefixes each question with. */
   topic: string;
-  /** Filled in when the judge returns, so it is absent on a fresh bookmark. */
+  /** The full-credit answer the question was generated with. Absent on bookmarks
+   * saved before the generator wrote one, which the judge then fills in. */
   suggestedAnswer?: string;
 };
 
@@ -34,29 +35,57 @@ export function topicOf(question: string): string {
 
 /**
  * Substitutes saved questions into a freshly generated set, each with `chance`
- * probability. `random` is injectable so the behaviour can be tested without
- * depending on Math.random.
+ * probability. Each item keeps its own full-credit answer — a substituted
+ * bookmark brings the one it was saved with, or none if it predates them.
+ * `random` is injectable so the behaviour can be tested without depending on
+ * Math.random.
  */
 export function pickQuestions(
-  generated: string[],
+  generated: GeneratedQuestion[],
   bookmarks: Bookmark[],
   chance: number,
   random: () => number = Math.random,
-): string[] {
-  const available = bookmarks.filter((bookmark) => !generated.includes(bookmark.question));
-  const result: string[] = [];
+): GeneratedQuestion[] {
+  const asked = generated.map((item) => item.question);
+  const available = bookmarks.filter((bookmark) => !asked.includes(bookmark.question));
+  const result: GeneratedQuestion[] = [];
 
-  for (const question of generated) {
-    const candidates = available.filter((bookmark) => !result.includes(bookmark.question));
+  for (const item of generated) {
+    const candidates = available.filter(
+      (bookmark) => !result.some((picked) => picked.question === bookmark.question),
+    );
     if (candidates.length > 0 && random() < chance) {
       // A second draw picks which saved question, so no bookmark is favoured.
-      result.push(candidates[Math.floor(random() * candidates.length)]!.question);
+      const saved = candidates[Math.floor(random() * candidates.length)]!;
+      result.push({ question: saved.question, answer: saved.suggestedAnswer });
     } else {
-      result.push(question);
+      result.push(item);
     }
   }
 
   return result;
+}
+
+/**
+ * Draws up to `count` saved questions at random, no repeats. Backs the
+ * "only cache" source, which spends no request at all — returning fewer than
+ * asked is the honest outcome when the cache is thin, and the interview just
+ * runs short.
+ */
+export function pickCached(
+  bookmarks: Bookmark[],
+  count: number,
+  random: () => number = Math.random,
+): GeneratedQuestion[] {
+  const pool = [...bookmarks];
+  const picked: GeneratedQuestion[] = [];
+
+  while (pool.length > 0 && picked.length < count) {
+    const [saved] = pool.splice(Math.floor(random() * pool.length), 1);
+    picked.push({ question: saved!.question, answer: saved!.suggestedAnswer });
+  }
+
+  return picked;
 }
 
 const listeners = new Set<() => void>();
@@ -113,8 +142,8 @@ function write(bookmarks: Bookmark[]): void {
 
 /**
  * Adds the question if absent, removes it if present. Returns the new state.
- * `suggestedAnswer` is known on the summary but not during the interview, where
- * scoring has not finished — see attachSuggestedAnswer for that case.
+ * `suggestedAnswer` comes from the generator, so it is usually known already —
+ * see attachSuggestedAnswer for reused questions that never had one.
  */
 export function toggleBookmark(question: string, role: Role, suggestedAnswer?: string): boolean {
   const current = loadBookmarks();

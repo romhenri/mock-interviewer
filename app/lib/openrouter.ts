@@ -1,18 +1,7 @@
+import { FREE_MODELS } from "./models.ts";
+
 const ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
 const DEFAULT_MODEL = "openai/gpt-oss-20b:free";
-
-/**
- * Free models that support strict structured output, ordered by measured
- * response time on the shared free pool (Aug 2026): gemma ~5s, nemotron-super
- * ~17s, gpt-oss ~18s, nemotron-nano ~37s. The chain is tried in order, so the
- * fastest survivor answers first.
- */
-const FALLBACK_MODELS = [
-  "google/gemma-4-26b-a4b-it:free",
-  "nvidia/nemotron-3-super-120b-a12b:free",
-  "openai/gpt-oss-20b:free",
-  "nvidia/nemotron-nano-9b-v2:free",
-];
 
 /**
  * Total wall-clock budget for the whole chain, not per attempt. Rate-limited
@@ -29,10 +18,15 @@ const PER_ATTEMPT_CAP_MS = 35_000;
 /** A failure the chain cannot fix, so trying further models is pointless. */
 class FatalError extends Error {}
 
-/** The configured model first, then the rest of the chain, no duplicates. */
-function modelChain(): string[] {
-  const primary = process.env.OPENROUTER_MODEL || DEFAULT_MODEL;
-  return [primary, ...FALLBACK_MODELS.filter((model) => model !== primary)];
+/**
+ * The chosen model first, then the rest of the chain, no duplicates. `preferred`
+ * comes from the browser, so it is checked against the known list rather than
+ * forwarded — it ends up in an outbound API call.
+ */
+function modelChain(preferred?: string): string[] {
+  const wanted = FREE_MODELS.includes(preferred as (typeof FREE_MODELS)[number]) ? preferred : null;
+  const primary = wanted || process.env.OPENROUTER_MODEL || DEFAULT_MODEL;
+  return [primary, ...FREE_MODELS.filter((model) => model !== primary)];
 }
 
 /**
@@ -43,12 +37,19 @@ function modelChain(): string[] {
  * single-model call fails often enough to be unusable. Falling back changes
  * which model answered — `served` reports it, because a score is only
  * comparable against others from the same judge.
+ *
+ * @param parse turns the raw JSON into what the caller needs, and throwing is how
+ * it rejects a model. Free models ignore the schema often enough that this has to
+ * run inside the chain: validated afterwards, one model's malformed answer failed
+ * the whole request while three working models sat untried.
  */
-export async function chatJSON(
+export async function chatJSON<T = unknown>(
   prompt: string,
   schema: { name: string; schema: object },
   userApiKey?: string,
-): Promise<{ content: unknown; served: string }> {
+  parse: (content: unknown) => T = (content) => content as T,
+  preferredModel?: string,
+): Promise<{ content: T; served: string }> {
   const apiKey = userApiKey || process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
     throw new Error(
@@ -59,7 +60,7 @@ export async function chatJSON(
   const failures: string[] = [];
   const deadline = Date.now() + TOTAL_BUDGET_MS;
 
-  for (const model of modelChain()) {
+  for (const model of modelChain(preferredModel)) {
     const remaining = deadline - Date.now();
     if (remaining <= 1_000) {
       failures.push(`${model}: skipped, ${TOTAL_BUDGET_MS / 1000}s budget spent`);
@@ -68,7 +69,8 @@ export async function chatJSON(
 
     try {
       const timeout = Math.min(remaining, PER_ATTEMPT_CAP_MS);
-      return { content: await callModel(apiKey, model, prompt, schema, timeout), served: model };
+      const raw = await callModel(apiKey, model, prompt, schema, timeout);
+      return { content: parse(raw), served: model };
     } catch (error) {
       if (error instanceof FatalError) throw error;
       failures.push(`${model}: ${(error as Error).message}`);

@@ -9,8 +9,12 @@ export type Criterion = (typeof CRITERIA)[number];
  * not the range — providers routinely ignore `minimum`/`maximum` — so the
  * bounds are checked here. Throws rather than clamping: an out-of-range score
  * means the judge misbehaved, and silently rounding it to 100 would hide that.
+ *
+ * @param reference the full-credit answer the question was generated with. When
+ * present it is what the judge scored against, so it is also what the candidate
+ * is shown — the judge was not asked to write a second one.
  */
-export function parseScore(raw: unknown): Score {
+export function parseScore(raw: unknown, reference?: string | null): Score {
   if (typeof raw !== "object" || raw === null) {
     throw new Error("Judge returned no score object.");
   }
@@ -27,15 +31,12 @@ export function parseScore(raw: unknown): Score {
   if (typeof candidate.feedback !== "string" || !candidate.feedback.trim()) {
     throw new Error("Judge returned no feedback.");
   }
-  if (typeof candidate.suggestedAnswer !== "string" || !candidate.suggestedAnswer.trim()) {
+  const suggestedAnswer = reference?.trim() || candidate.suggestedAnswer;
+  if (typeof suggestedAnswer !== "string" || !suggestedAnswer.trim()) {
     throw new Error("Judge returned no suggested answer.");
   }
 
-  return {
-    ...scores,
-    feedback: candidate.feedback,
-    suggestedAnswer: candidate.suggestedAnswer,
-  };
+  return { ...scores, feedback: candidate.feedback, suggestedAnswer };
 }
 
 /** Narrows a stored slot to a real score — excludes skipped, pending and failed. */

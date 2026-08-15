@@ -5,12 +5,19 @@ import { parse } from "./session.ts";
 const session = {
   role: "AI Engineer",
   questions: ["q1"],
+  references: ["a1"],
   answers: [],
   scores: [],
 };
 
 test("parse accepts a well-formed session", () => {
   assert.deepEqual(parse(JSON.stringify(session)), session);
+});
+
+test("parse keeps a session stored before questions carried answers", () => {
+  // Dropping it would send someone mid-interview back to the home page.
+  const old = { ...session, references: undefined };
+  assert.deepEqual(parse(JSON.stringify(old)), { ...session, references: [] });
 });
 
 test("parse treats absent or unparseable storage as no session", () => {

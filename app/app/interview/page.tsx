@@ -24,6 +24,7 @@ export default function Interview() {
   const index = session.answers.length;
   const question = session.questions[index];
   if (question === undefined) return null;
+  const reference = session.references[index] ?? null;
   const isLast = index === session.questions.length - 1;
 
   /** Records the answer and moves on. The judge call runs in the background. */
@@ -38,7 +39,7 @@ export default function Interview() {
     });
     // Deliberately not awaited — the candidate should not wait on the judge.
     // The result is written back into the session by index when it arrives.
-    void scoreAnswer(index, question, answer);
+    void scoreAnswer(index, question, answer, reference);
 
     setAnswer("");
     if (isLast) router.push("/summary");
@@ -76,14 +77,20 @@ export default function Interview() {
 
       <div className="flex items-start gap-3">
         <h1 className="flex-1 text-xl font-medium">{question}</h1>
-        <BookmarkButton question={question} role={session.role} />
+        {/* The model answer exists before the interview starts, so a question
+            bookmarked here is saved with it — no need to wait for the judge. */}
+        <BookmarkButton
+          question={question}
+          role={session.role}
+          suggestedAnswer={reference ?? undefined}
+        />
       </div>
 
       <textarea
         value={answer}
         onChange={(event) => setAnswer(event.target.value)}
         rows={4}
-        placeholder={`Answer as you would out loud — ${ANSWER_LENGTH}, name the mechanism, don't pad it.`}
+        placeholder={`Answer as you would out loud, name the mechanism, don't pad it.`}
         className="w-full resize-y rounded-lg border border-current/20 bg-transparent p-3 font-sans text-sm"
       />
 
