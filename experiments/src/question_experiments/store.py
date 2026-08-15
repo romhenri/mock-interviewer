@@ -33,6 +33,11 @@ def question_id(run_id: str, model: str, index: int) -> str:
     return hashlib.sha256(f"{run_id}|{model}|{index}".encode()).hexdigest()[:12]
 
 
+def failed(row: dict) -> bool:
+    """A row failed iff it carries an error. The single definition, so no reader invents another."""
+    return row.get("error") is not None
+
+
 def append(path: Path, rows: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:

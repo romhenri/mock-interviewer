@@ -43,7 +43,7 @@ def main() -> int:
     parser.add_argument("--seed", type=int, help="fix the shuffle, for a reproducible order")
     args = parser.parse_args()
 
-    questions = [row for row in store.read(store.QUESTIONS) if not row["failed"]]
+    questions = [row for row in store.read(store.QUESTIONS) if not store.failed(row)]
     if args.run:
         questions = [row for row in questions if row["run_id"] == args.run]
     if args.config_hash:
@@ -70,6 +70,12 @@ def main() -> int:
     for position, row in enumerate(pending, start=1):
         print(f"[{position}/{len(pending)}]  subject: {row['subject']}")
         print(f"  {row['text']}\n")
+        # The model's own answer, indented and labelled so it stays evidence rather than
+        # the thing being rated. It is what makes a question judgeable: one that cannot be
+        # answered in the budget, or whose own answer only restates it, is a bad question.
+        # Older rows predate the field and print nothing.
+        if row.get("suggested_answer"):
+            print(f"  would accept: {row['suggested_answer']}\n")
 
         choice = _ask()
         if choice == "q":

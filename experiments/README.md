@@ -24,6 +24,18 @@ cp .env.example .env      # then paste your OpenRouter key into it
 .venv/bin/python metrics.py
 ```
 
+To read the questions side by side instead of as a score — one row per subject, one column
+per model — serve the folder and open the viewer. It is plain HTML over the same JSONL, so
+there is nothing to build:
+
+```bash
+python3 -m http.server 8000     # from experiments/
+open http://localhost:8000/web_view.html
+```
+
+Do this **after** rating, not before: it shows model names, and `rate.py` is blind for a
+reason.
+
 ```
 config ac57beed9a04 — 2 run(s): 20260812T2312Z-a1b2c3, 20260813T0904Z-9f8e7d
   model                                       quality   stdev  rated  covered   fail   latency
@@ -43,6 +55,11 @@ swallowed, and a model that returns 14 of 15 keeps its 14.
 **One assignment, every model.** All 15 AI Engineer subjects, one question each, so a rating
 compares model A's RAG question against model B's RAG question rather than comparing which
 subjects each chose. Set in `conf/base/parameters.yml`.
+
+**Each question comes back with the answer its author would accept**, in the same request —
+so it costs nothing and no second model's opinion gets mixed in. `rate.py` shows it under the
+question. It is what makes a question judgeable: one that cannot be answered in 2–3 sentences,
+or whose own model answer just restates it, is a bad question and now says so on screen.
 
 **The model is pinned per request.** The app's client falls through four models when one is
 rate-limited; this one fails instead. A silent fallback would file gemma's questions under
@@ -72,6 +89,7 @@ src/question_experiments/
   pipelines/generate/      the DAG: build config -> generate -> persist
 rate.py                    interactive 1-5 rating, blind and resumable
 metrics.py                 mean quality per model, per config
+web_view.html              questions side by side, one column per model — no build, no deps
 test_experiments.py        self-checks — python test_experiments.py
 data/
   questions.jsonl          every question ever generated

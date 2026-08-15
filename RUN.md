@@ -2,9 +2,8 @@
 
 ## Setup
 ```bash
-cd app
-npm install
-cp .env.local.example .env.local   # then set OPENROUTER_API_KEY=sk-or-v1-...
+cd app && npm install
+cp .env.local.example .env.local   # OPENROUTER_API_KEY=sk-or-v1-... from https://openrouter.ai/keys
 ```
 
 ## Run
@@ -20,8 +19,11 @@ npm run lint
 npm run build
 ```
 
-## Notes
-- `OPENROUTER_API_KEY` is required — every screen past role selection makes an API call. Get one at https://openrouter.ai/keys
-- Free tier is 50 requests/day without credits; one interview costs 4.
-- `OPENROUTER_MODEL` defaults to `openai/gpt-oss-20b:free`. A replacement must support structured output — the app forces a JSON schema.
-- All commands run from `app/`, not the repo root.
+## Experiments — separate project, optional
+```bash
+cd experiments && python3 -m venv .venv && .venv/bin/pip install -e .
+cp .env.example .env       # its own OPENROUTER_API_KEY, not the app's
+.venv/bin/kedro run        # 5 models x 15 subjects, costs 5 of the 50 free requests/day
+.venv/bin/python rate.py   # rate 1-5, blind, resumable
+.venv/bin/python metrics.py
+```

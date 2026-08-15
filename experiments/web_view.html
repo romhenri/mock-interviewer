@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Question comparison — by model</title>
+<style>
+  :root {
+    --bg: #fbfbfa; --fg: #1a1a19; --dim: #6b6b68; --line: #e2e1dd;
+    --card: #fff; --accent: #2f5d50; --bad: #8b2f2f; --bad-bg: #fdf2f2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17181a; --fg: #e8e8e6; --dim: #9a9a96; --line: #2e3033;
+      --card: #1f2124; --accent: #7fbfa8; --bad: #e08b8b; --bad-bg: #2a1e1e;
+    }
+  }
+  * { box-sizing: border-box; }
+  /* The grid owns both scrollbars, so `position: sticky` inside it resolves against the
+     grid rather than the viewport. Sticking to the viewport instead let the column
+     headers paint over the first row at scroll 0. */
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg); overflow: hidden;
+    display: flex; flex-direction: column;
+    font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  header {
+    flex: none; background: var(--bg);
+    border-bottom: 1px solid var(--line); padding: 14px 20px;
+    display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
+  }
+  h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  .meta { color: var(--dim); font-size: 13px; }
+  label { font-size: 13px; color: var(--dim); display: flex; gap: 6px; align-items: center; }
+  select { font: inherit; font-size: 13px; padding: 3px 6px; background: var(--card);
+           color: var(--fg); border: 1px solid var(--line); border-radius: 5px; }
+
+  #scroll { flex: 1; overflow: auto; }
+  #grid { display: grid; min-width: max-content; align-items: start; }
+  .cell { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
+          padding: 12px 14px; width: 340px; align-self: stretch; }
+  .rowhead {
+    position: sticky; left: 0; z-index: 2; background: var(--bg);
+    width: 170px; font-weight: 600; font-size: 13px;
+  }
+  .colhead {
+    position: sticky; top: 0; z-index: 1; background: var(--card);
+    font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    word-break: break-all;
+  }
+  .colhead.rowhead { z-index: 3; font-family: inherit; }
+  .colhead .sub { color: var(--dim); font-family: ui-sans-serif, system-ui, sans-serif;
+                  margin-top: 4px; display: block; word-break: normal; }
+  .q { margin: 0; }
+  .a { margin: 8px 0 0; color: var(--dim); font-size: 13.5px;
+       border-left: 2px solid var(--line); padding-left: 9px; }
+  .gap { color: var(--dim); font-style: italic; font-size: 13px; }
+  .fail { color: var(--bad); background: var(--bad-bg); }
+  .fail .sub { color: var(--bad); }
+  .why { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 11.5px;
+         margin-top: 6px; display: block; word-break: normal; opacity: .85; }
+  .note { padding: 12px 20px; color: var(--dim); font-size: 13px;
+          border-bottom: 1px solid var(--line); flex: none; margin: 0; }
+  #load { padding: 40px 20px; max-width: 620px; flex: none; }
+  #load pre { background: var(--card); border: 1px solid var(--line);
+              border-radius: 6px; padding: 12px; overflow-x: auto; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<header hidden id="bar">
+  <h1>Questions by model</h1>
+  <label>config
+    <select id="config"></select>
+  </label>
+  <label><input type="checkbox" id="answers" checked> show answers</label>
+  <span class="meta" id="meta"></span>
+</header>
+
+<p class="note" hidden id="blindwarn">
+  Reading this before <code>rate.py</code> breaks the blind — you will know who wrote what.
+  Rate first, compare second.
+</p>
+
+<div id="scroll"><div id="grid"></div></div>
+
+<section id="load">
+  <h1>Question comparison</h1>
+  <p id="why">Loading <code>data/questions.jsonl</code>…</p>
+  <p><label>…or pick the file: <input type="file" id="file" accept=".jsonl,.json,.txt"></label></p>
+</section>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let ROWS = [];
+
+// fetch() is blocked on file:// by CORS, so a double-clicked page lands here.
+fetch("data/questions.jsonl")
+  .then((r) => (r.ok ? r.text() : Promise.reject(new Error("HTTP " + r.status))))
+  .then(start)
+  .catch(() => {
+    $("why").innerHTML =
+      "Can't read the file directly from disk — the browser blocks it. Serve the folder:" +
+      "<pre>cd experiments\npython3 -m http.server 8000</pre>" +
+      "then open <a href='http://localhost:8000/web_view.html'>localhost:8000/web_view.html</a>.";
+  });
+
+$("file").addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (file) file.text().then(start);
+});
+
+function start(text) {
+  ROWS = text.split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
+  if (!ROWS.length) return ($("why").textContent = "No rows in the file yet — run `kedro run` first.");
+
+  // Newest config first: later lines were appended later.
+  const configs = [...new Set(ROWS.map((r) => r.config_hash))].reverse();
+  $("config").innerHTML = configs
+    .map((c) => `<option value="${c}">${c} — ${ROWS.filter((r) => r.config_hash === c).length} rows</option>`)
+    .join("");
+  $("config").disabled = configs.length < 2;
+
+  $("load").hidden = true;
+  $("bar").hidden = false;
+  $("blindwarn").hidden = false;
+  $("config").onchange = render;
+  $("answers").onchange = render;
+  render();
+}
+
+function render() {
+  const rows = ROWS.filter((r) => r.config_hash === $("config").value);
+  const showAnswers = $("answers").checked;
+
+  const at = new Map();      // "subject model" -> row
+  const failed = new Map();  // model -> error text
+  for (const r of rows) {
+    if (r.error) failed.set(r.model, r.error);
+    else if (r.subject) at.set(r.subject + " " + r.model, r);
+  }
+
+  // Models that produced nothing go last — they have no questions to compare, and left
+  // of the ones that do they push the actual comparison off the screen.
+  const models = [...new Set(rows.map((r) => r.model))].sort(
+    (a, b) => (failed.has(a) ? 1 : 0) - (failed.has(b) ? 1 : 0)
+  );
+
+  // Subjects ordered by the earliest slot any model used, so the grid follows the
+  // assignment order even when one model reorders its output.
+  const firstIndex = new Map();
+  for (const r of rows) {
+    if (r.error || !r.subject) continue;
+    const seen = firstIndex.get(r.subject);
+    if (seen === undefined || r.index < seen) firstIndex.set(r.subject, r.index);
+  }
+  const subjects = [...firstIndex.keys()].sort((a, b) => firstIndex.get(a) - firstIndex.get(b));
+
+  const grid = $("grid");
+  grid.style.gridTemplateColumns = `170px repeat(${models.length}, 340px)`;
+  const html = [`<div class="cell colhead rowhead">subject</div>`];
+
+  for (const model of models) {
+    const mine = rows.filter((r) => r.model === model && !r.error);
+    const ms = mine.length ? Math.round(mine[0].latency_ms / 1000) + "s" : "—";
+    // The failure is stated once, here, rather than repeated in all 15 cells below — one
+    // model's stack trace should not crowd out the comparison it is absent from. Full
+    // text on hover.
+    const why = failed.has(model)
+      ? `<span class="why" title="${esc(failed.get(model))}">${esc(reason(failed.get(model)))}</span>`
+      : "";
+    html.push(
+      `<div class="cell colhead${failed.has(model) ? " fail" : ""}">${esc(model)}` +
+        `<span class="sub">${mine.length}/${subjects.length} questions · ${ms}</span>${why}</div>`
+    );
+  }
+
+  for (const subject of subjects) {
+    html.push(`<div class="cell rowhead">${esc(subject)}</div>`);
+    for (const model of models) {
+      const row = at.get(subject + " " + model);
+      if (!row) {
+        // "no response" and "not covered" are different findings: the pool refused the
+        // request, versus the model answered but skipped this subject.
+        html.push(
+          failed.has(model)
+            ? `<div class="cell fail"><span class="gap">no response</span></div>`
+            : `<div class="cell"><span class="gap">— not covered</span></div>`
+        );
+        continue;
+      }
+      const answer =
+        showAnswers && row.suggested_answer
+          ? `<p class="a">${esc(row.suggested_answer)}</p>`
+          : "";
+      html.push(`<div class="cell"><p class="q">${esc(row.text)}</p>${answer}</div>`);
+    }
+  }
+
+  grid.innerHTML = html.join("");
+  const runs = new Set(rows.map((r) => r.run_id)).size;
+  $("meta").textContent =
+    `${models.length} models · ${subjects.length} subjects · ${runs} run(s)` +
+    (failed.size ? ` · ${failed.size} produced nothing` : "");
+}
+
+/** Two very different findings hide behind one error string: the pool refused the request
+ *  (re-run and it works), or the model could not hold the schema (that IS the result). */
+function reason(error) {
+  if (/429|rate.?limit/i.test(error)) return "rate-limited upstream — re-run, not a model result";
+  if (/invalid JSON/i.test(error)) return "broke the JSON schema — a result about this model";
+  if (/no response within/i.test(error)) return "timed out";
+  if (/no message content/i.test(error)) return "returned an empty message";
+  return error.slice(0, 90);
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+</script>
+</body>
+</html>

@@ -12,6 +12,10 @@ Two differences from the app, both required by the experiment design:
    comparing subject choices.
 2. Each item carries its subject back, so subject compliance is machine-checkable
    instead of a judgement call.
+3. Each item also carries the answer the model would accept, written in the same request.
+   A separate scoring call would cost a request per question and measure a second model;
+   asked here it is free, and it gives the rater the evidence a question is answerable —
+   a question whose own model answer is vague is a bad question.
 """
 
 from __future__ import annotations
@@ -22,15 +26,20 @@ import json
 #: Copied verbatim from the app — questions must stay answerable in this budget.
 ANSWER_LENGTH = "2–3 sentences"
 
-PROMPT_VERSION = "v1"
+#: v2 added the model answer to each item. Bumped because the manifest records this string,
+#: and one label covering two different prompts makes every old manifest a lie.
+PROMPT_VERSION = "v2"
 
 
 def questions_schema(subjects: list[str]) -> dict:
-    """Strict JSON schema: exactly one item per subject, each tagged with its subject.
+    """Strict JSON schema: one item per subject — subject tag, question, and model answer.
 
     `enum` constrains the tag to the assignment, so a model cannot invent a subject —
     but nothing stops it tagging a question "RAG" and writing about CNNs. That is what
     a human rating catches, and why the tag is checked as *data* rather than trusted.
+
+    `answer` is required rather than optional: a model that skips it has not done the
+    assignment, and an optional field would let that pass as a full result.
     """
     return {
         "name": "interview_questions",
@@ -44,8 +53,9 @@ def questions_schema(subjects: list[str]) -> dict:
                         "properties": {
                             "subject": {"type": "string", "enum": subjects},
                             "question": {"type": "string"},
+                            "answer": {"type": "string"},
                         },
-                        "required": ["subject", "question"],
+                        "required": ["subject", "question", "answer"],
                         "additionalProperties": False,
                     },
                     "minItems": len(subjects),
@@ -65,7 +75,8 @@ def questions_prompt(role: str, level: str, subjects: list[str]) -> str:
     return f"""You are a senior technical interviewer hiring for a {level}-level {role} position.
 
 Write exactly {count} interview questions for this role — one for each subject below, in
-this order. Return each question tagged with the subject it belongs to.
+this order. Return each question tagged with the subject it belongs to, and with the
+answer you would accept as full credit.
 
 {subject_list}
 
@@ -84,6 +95,12 @@ Rules:
 - Use each subject exactly once. Do not repeat a subject and do not skip one.
 - No code, no diagrams, no "walk me through your experience with…" biography questions.
 - Return only the questions, with no numbering or preamble.
+
+For every question, also write the answer. It is the answer you would give full credit to,
+and it must fit the same {ANSWER_LENGTH} the candidate has — it shows what a complete answer
+looks like at that length. Write it the way a candidate would say it out loud, not as advice
+about what to say. Name the actual mechanism; an answer that restates the question in other
+words is not a full-credit answer.
 
 Good examples of the shape and scope:
 - "Reverse Proxy: What is the primary function of a reverse proxy in a system architecture?"

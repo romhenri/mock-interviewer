@@ -57,7 +57,7 @@ def generate_questions(config: dict) -> list[dict]:
     have to be generated at build time by a factory, which buys a prettier graph and costs
     a pipeline-generation layer to debug whenever a run misbehaves.
 
-    A model that fails both attempts contributes a single row with `failed` set, so its
+    A model that fails both attempts contributes a single row carrying `error`, so its
     failure rate survives into the report instead of looking like an absent model.
     """
     api_key = load_api_key()
@@ -93,11 +93,12 @@ def generate_questions(config: dict) -> list[dict]:
 def _question_rows(config: dict, model: str, questions: list[dict], latency_ms: int) -> list[dict]:
     """One row per question the model returned.
 
-    `subject` is the subject the model tagged, not the slot it landed in. Compliance is
+    `subject` is the subject the model tagged, never the slot it landed in. Compliance is
     about *coverage* — did every assigned subject get a question — and a model that answers
     all 15 in a different order has complied. Scoring position instead would report a
     reordered-but-complete set as 0% compliant, which is a false finding about the exact
-    thing the column exists to measure.
+    thing the column exists to measure. The assigned slot is therefore not recorded; it is
+    in the run manifest if a question about ordering ever needs answering.
 
     `n_subjects` rides along so the report can compute coverage without reopening the
     manifest for every row.
@@ -109,12 +110,13 @@ def _question_rows(config: dict, model: str, questions: list[dict], latency_ms: 
             "config_hash": config["config_hash"],
             "model": model,
             "subject": str(item.get("subject", "")),
-            "slot_subject": config["subjects"][index],
             "n_subjects": len(config["subjects"]),
             "index": index,
             "text": str(item.get("question", "")),
+            # Named apart from `text` because both are prose and confusing them silently
+            # swaps what gets rated. `answer` is the schema's key, this is the row's.
+            "suggested_answer": str(item.get("answer", "")),
             "latency_ms": latency_ms,
-            "failed": False,
             "error": None,
         }
         for index, item in enumerate(questions)
@@ -128,12 +130,11 @@ def _failure_row(config: dict, model: str, error: str) -> dict:
         "config_hash": config["config_hash"],
         "model": model,
         "subject": None,
-        "slot_subject": None,
         "n_subjects": len(config["subjects"]),
         "index": -1,
         "text": None,
+        "suggested_answer": None,
         "latency_ms": None,
-        "failed": True,
         "error": error,
     }
 
@@ -146,7 +147,7 @@ def persist_run(rows: list[dict], config: dict) -> dict:
     """
     store.append(store.QUESTIONS, rows)
 
-    failed = sorted({row["model"] for row in rows if row["failed"]})
+    failed = sorted({row["model"] for row in rows if store.failed(row)})
     summary = {
         "run_id": config["run_id"],
         "started_at": config["started_at"],
@@ -156,7 +157,7 @@ def persist_run(rows: list[dict], config: dict) -> dict:
         "level": config["level"],
         "models": config["models"],
         "subjects": config["subjects"],
-        "questions_written": sum(1 for row in rows if not row["failed"]),
+        "questions_written": sum(1 for row in rows if not store.failed(row)),
         "failed_models": failed,
         "prompt": config["prompt"],
     }

@@ -34,14 +34,14 @@ def summarise(questions: list[dict], ratings: dict[tuple[str, str], int]) -> lis
 
     summary = []
     for model, rows in sorted(by_model.items()):
-        produced = [row for row in rows if not row["failed"]]
+        produced = [row for row in rows if not store.failed(row)]
         scores = [rating for row in produced for rating in by_question[row["question_id"]]]
 
         # A request either produces the whole set or fails, so requests are counted as
         # (run_id, model) pairs — counting rows would let one model's 15 questions
         # outweigh another's single failure.
         requests = {row["run_id"] for row in rows}
-        failed_requests = {row["run_id"] for row in rows if row["failed"]}
+        failed_requests = {row["run_id"] for row in rows if store.failed(row)}
 
         summary.append(
             {

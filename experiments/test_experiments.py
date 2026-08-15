@@ -52,6 +52,19 @@ def test_schema_pins_count_and_subjects():
     schema = questions_schema(SUBJECTS)["schema"]["properties"]["questions"]
     assert schema["minItems"] == schema["maxItems"] == len(SUBJECTS)
     assert schema["items"]["properties"]["subject"]["enum"] == SUBJECTS
+    # The answer comes back in the same request as the question. Required, not optional:
+    # optional would let a model skip it and still look like a complete result.
+    assert schema["items"]["required"] == ["subject", "question", "answer"]
+
+
+def test_the_model_answer_lands_beside_its_question():
+    config = build_run_config(PARAMS)
+    rows = _question_rows(config, "m", _answers(SUBJECTS), latency_ms=10)
+    assert [row["suggested_answer"] for row in rows] == [f"Because {s}." for s in SUBJECTS]
+    # A model that returns a question with no answer is not a failure — the question is
+    # still ratable — but the gap must be visible rather than filled in.
+    bare = _question_rows(config, "m", [{"subject": "RAG", "question": "RAG: why?"}], latency_ms=10)
+    assert bare[0]["suggested_answer"] == ""
 
 
 def test_duplicate_subjects_are_rejected():
@@ -140,7 +153,7 @@ def test_metrics_aggregate_per_model():
         _row("q1", "fast", subject="RAG", latency_ms=100),
         _row("q2", "fast", subject="Attention", latency_ms=100),
         _row("q3", "slow", subject="RAG", latency_ms=900),
-        {**_row("x", "broken"), "failed": True, "latency_ms": None},
+        {**_row("x", "broken"), "error": "HTTP 429", "latency_ms": None},
     ]
     ratings = {("q1", "ana"): 5, ("q2", "ana"): 3, ("q3", "ana"): 2}
 
@@ -158,6 +171,18 @@ def test_metrics_aggregate_per_model():
     assert [row["model"] for row in metrics.summarise(questions, ratings)] == ["fast", "slow", "broken"]
 
 
+def test_metrics_read_rows_written_before_the_failed_key_was_dropped():
+    """`questions.jsonl` is append-only, so rows written by an older schema stay in the file
+    forever. Failure is defined by `error`, which those rows already carry — the stale
+    `failed` and `slot_subject` keys ride along unread rather than needing a migration."""
+    legacy_ok = {**_row("q1", "m"), "slot_subject": "RAG", "failed": False}
+    legacy_bad = {**_row("x", "m"), "slot_subject": None, "failed": True, "error": "HTTP 429"}
+
+    summary = metrics.summarise([legacy_ok, legacy_bad], {("q1", "ana"): 4})[0]
+    assert summary["n_questions"] == 1, "the legacy failure row must not count as a question"
+    assert summary["failure_rate"] == 1.0
+
+
 def test_metrics_ignore_unrated_questions_without_dropping_them():
     questions = [_row("q1", "m"), _row("q2", "m")]
     summary = metrics.summarise(questions, {("q1", "ana"): 4})[0]
@@ -173,7 +198,7 @@ def test_persist_appends_and_writes_a_readable_manifest():
         store.RUNS = pathlib.Path(tmp) / "runs"
 
         config = build_run_config(PARAMS)
-        persist_run([_row("q1", "a"), {**_row("x", "b"), "failed": True}], config)
+        persist_run([_row("q1", "a"), {**_row("x", "b"), "error": "HTTP 429"}], config)
         persist_run([_row("q2", "a")], build_run_config(PARAMS))
 
         assert len(store.read(store.QUESTIONS)) == 3, "second run must append, not overwrite"
@@ -187,7 +212,7 @@ def test_persist_appends_and_writes_a_readable_manifest():
 
 
 def _answers(subjects: list[str]) -> list[dict]:
-    return [{"subject": s, "question": f"{s}: why?"} for s in subjects]
+    return [{"subject": s, "question": f"{s}: why?", "answer": f"Because {s}."} for s in subjects]
 
 
 def _row(question_id: str, model: str, subject: str = "RAG", latency_ms: int = 100) -> dict:
@@ -197,12 +222,11 @@ def _row(question_id: str, model: str, subject: str = "RAG", latency_ms: int = 1
         "config_hash": "abc",
         "model": model,
         "subject": subject,
-        "slot_subject": "RAG",
         "n_subjects": 3,
         "index": 0,
         "text": "RAG: why chunk?",
+        "suggested_answer": "Chunks keep retrieval units small enough to match a query.",
         "latency_ms": latency_ms,
-        "failed": False,
         "error": None,
     }
 
