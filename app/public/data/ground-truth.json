@@ -1,0 +1,67 @@
+[
+  {
+    "question": "Overfitting: What is the primary difference between training error and validation error in a machine learning model?",
+    "role": "AI Engineer",
+    "topic": "Overfitting",
+    "suggestedAnswer": "Training error is computed on the same data used to fit the model, so it tends to be lower. Validation error is computed on a separate, unseen dataset, and it reflects how well the model generalizes. The difference shows whether the model is overfitting."
+  },
+  {
+    "question": "Transformer Architecture: What is the specific purpose of the scaled dot-product attention mechanism?",
+    "role": "AI Engineer",
+    "topic": "Transformer Architecture",
+    "suggestedAnswer": "The scaled dot‑product attention computes a weighted sum of value vectors, where the weights are the softmax of the dot product between query and key vectors, scaled by the square root of the key dimension to keep gradients stable. This allows the model to focus on relevant tokens when predicting the next token."
+  },
+  {
+    "question": "Data Preprocessing: Why is feature scaling necessary before feeding numerical data into a k-nearest neighbors algorithm?",
+    "role": "AI Engineer",
+    "topic": "Data Preprocessing",
+    "suggestedAnswer": "K-Nearest Neighbors relies on distance metrics like Euclidean distance to identify proximity. If features have different scales, the feature with the largest range will disproportionately dominate the distance calculation, making the other features irrelevant."
+  },
+  {
+    "question": "Loss Functions: What is the specific purpose of a cross-entropy loss function during neural network training?",
+    "role": "AI Engineer",
+    "topic": "Loss Functions",
+    "suggestedAnswer": "Cross‑entropy measures the difference between the predicted probability distribution and the true distribution. In training, it penalises predictions that assign low probability to the correct class, encouraging the network to output higher probabilities for the true label. It is equivalent to the negative log‑likelihood of the correct class and drives gradient updates that reduce classification error."
+  },
+  {
+    "question": "Overfitting: What is the effect of model complexity on the gap between training error and validation error?",
+    "role": "AI Engineer",
+    "topic": "Overfitting",
+    "suggestedAnswer": "When a model’s complexity grows, its training error typically falls because it can fit the training data more closely. However, after a certain point, the validation error begins to rise as the model starts to capture noise, widening the gap between training and validation errors. This divergence signals overfitting."
+  },
+  {
+    "question": "Supervised Learning: What is the primary difference between training a model using labeled data versus unlabeled data?",
+    "role": "AI Engineer",
+    "topic": "Supervised Learning",
+    "suggestedAnswer": "In supervised learning the model is trained on input–output pairs, using the labels to guide the learning of a mapping from features to targets. In unsupervised learning there are no labels; the model instead discovers structure or patterns in the data, such as clusters or latent representations."
+  },
+  {
+    "question": "JavaScript DOM: What is the difference between a parent node and a child element in the document object model?",
+    "role": "Front-end Engineer",
+    "topic": "JavaScript DOM",
+    "suggestedAnswer": "In the DOM, a parent node is the element that contains another element as a child. The child element is a direct descendant of that parent, accessible via properties like parentNode and childNodes. This relationship defines the tree structure of the document."
+  },
+  {
+    "question": "HTTP: What is the purpose of the 'alt' attribute on an HTML img tag for accessibility?",
+    "role": "Front-end Engineer",
+    "topic": "HTTP"
+  },
+  {
+    "question": "CSS Box Model: What are the components that make up the total width of an element when box-sizing is set to border-box?",
+    "role": "Front-end Engineer",
+    "topic": "CSS Box Model",
+    "suggestedAnswer": "With box-sizing: border-box, the total width of an element is the width property itself plus the left and right padding and the left and right border. The margin is added outside and does not affect the element’s width, but it does affect the space the element occupies."
+  },
+  {
+    "question": "Precision vs Recall: What is the difference between precision and recall in classification evaluation?",
+    "role": "AI Engineer",
+    "topic": "Precision vs Recall",
+    "suggestedAnswer": "Precision is the proportion of predicted positives that are actually positive, measuring correctness of positive predictions. Recall is the proportion of actual positives that were correctly identified, measuring completeness. They trade off; high precision can come with low recall and vice versa."
+  },
+  {
+    "question": "Containerization: What is a container and why is it useful for deploying machine learning models?",
+    "role": "AI Engineer",
+    "topic": "Containerization",
+    "suggestedAnswer": "A container is a lightweight, isolated runtime environment that packages an application and its dependencies into a single image. It ensures consistent behavior across development, testing, and production by eliminating environment differences. Containers also enable rapid scaling and efficient resource usage for ML inference services."
+  }
+]

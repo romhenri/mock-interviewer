@@ -33,16 +33,16 @@ pages call the routes over HTTP, and both import from `lib/` directly. The serve
 
 **app/lib** — All the logic. `openrouter.ts` (the four-model fallback chain, server-only),
 `prompts.ts`, `score.ts` (judge-response validation and per-criterion averaging), `session.ts`,
-`bookmarks.ts`, `apiKey.ts`, `types.ts`. The tested pieces are `score.ts`, `session.ts` and
-`bookmarks.ts` — the two places a wrong number could appear silently, plus the storage they
-read from.
+`cache.ts`, `apiKey.ts`, `settings.ts`, `types.ts`. The tested pieces are `score.ts`,
+`session.ts`, `cache.ts` and `settings.ts` — the two places a wrong number could appear
+silently, plus the storage they read from.
 
 **browser storage** — `sessionStorage` under `mock-interview-session` for the live interview,
-`localStorage` under `mock-interview-bookmarks` for saved questions, `mock-interview-settings`
-for the Settings modal, and the user's own pasted key. Closing the tab ends the interview;
-bookmarks and settings outlive it.
+`localStorage` under `mock-interview-bookmarks` (kept under the old name so existing caches
+survive) for every generated question, `mock-interview-settings` for the Settings modal, and the
+user's own pasted key. Closing the tab ends the interview; the cache and settings outlive it.
 
-**app/components** — one file (`BookmarkButton.tsx`), folded into `app/app` above rather than
+**app/components** — one file (`CacheButton.tsx`), folded into `app/app` above rather than
 given a box.
 
 ## Worth noting
@@ -54,14 +54,17 @@ score records the model that produced it and `/summary` warns when more than one
 Generation returns each question with the full-credit answer it expects, and the judge scores
 against that answer instead of inventing its own bar per call. It costs nothing — the generator
 already knows what it is asking — and it means the answer shown to the candidate is the one the
-score was measured against. Questions reused from bookmarks may predate it, so the reference is
+score was measured against. Questions reused from the cache may predate it, so the reference is
 nullable and the judge falls back to writing one.
 
 Settings (`lib/settings.ts`) only ever reorders or skips work, never breaks it. The priority model
 is sent as `x-openrouter-model` and moves to the head of the chain — validated against
 `lib/models.ts` on both sides, because it ends up in an outbound API call — and the rest of the
-chain still covers for it. The question source picks between generating, mixing in bookmarks
-(`pickQuestions`) and drawing from bookmarks alone (`pickCached`, which spends no request).
+chain still covers for it. The question source picks between generating a fresh set, drawing from
+the cache, and drawing from the fixed set in `public/data/ground-truth.json` — the last two share
+`pickCached` and spend no request. The ground-truth file is fetched rather than imported, so
+editing it needs no rebuild, and it is validated with the same `parseCached` as localStorage
+because both are hand-editable.
 
 Both routes validate the model's reply *inside* `chatJSON`, as the `parse` argument. A free model
 ignoring the schema is that model's failure and the chain moves to the next one; validating after

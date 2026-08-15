@@ -82,7 +82,7 @@ Bad — too broad to answer in ${ANSWER_LENGTH}:
 
 /**
  * @param withSuggestedAnswer only when the question came without a reference answer —
- * old bookmarks predate them. Asking for one the caller already has wastes tokens on
+ * older cached questions predate them. Asking for one the caller already has wastes tokens on
  * output nobody reads.
  */
 export function scoreSchema(withSuggestedAnswer: boolean) {

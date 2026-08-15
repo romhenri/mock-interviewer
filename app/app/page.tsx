@@ -1,15 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { clearApiKey, loadApiKey, saveApiKey } from "@/lib/apiKey";
-import {
-  loadBookmarks,
-  pickCached,
-  pickQuestions,
-  REUSE_CHANCE,
-  type Bookmark,
-} from "@/lib/bookmarks";
+import { cacheQuestions, loadCache, loadGroundTruth, pickCached } from "@/lib/cache";
 import { FREE_MODELS, modelLabel } from "@/lib/models";
 import { QUESTION_COUNT } from "@/lib/prompts";
 import { saveSession } from "@/lib/session";
@@ -28,6 +23,7 @@ import {
   ROLE_SUMMARY,
   ROLES,
   SUBJECTS,
+  levelLabel,
   type GeneratedQuestion,
   type Role,
 } from "@/lib/types";
@@ -82,13 +78,29 @@ export default function RoleSelection() {
     setLoading(true);
     setError(null);
     try {
+      // Both stored sources read the same way: filter to the role, draw at
+      // random. Only generation spends a request.
       const { source } = loadSettings();
-      const saved = loadBookmarks().filter((bookmark) => bookmark.role === role);
-      const picked = source === "cache" ? pickCached(saved, QUESTION_COUNT) : await generate(saved);
+      const pool =
+        source === "cache" ? loadCache() : source === "truth" ? await loadGroundTruth() : null;
+      const picked = pool
+        ? pickCached(
+            pool.filter((entry) => entry.role === role),
+            QUESTION_COUNT,
+          )
+        : await generate();
 
       if (picked.length === 0) {
-        throw new Error(`No saved ${role} questions yet — bookmark some, or change the source.`);
+        throw new Error(
+          source === "truth"
+            ? `No ground-truth questions for ${role}. The file does not cover every role.`
+            : `Nothing cached for ${role} yet. Run an interview on full generation first.`,
+        );
       }
+      // Generation is what costs a request, so its output is always kept. Both
+      // stored sources are already on disk, and the summary is where questions
+      // get discarded.
+      if (!pool) cacheQuestions(picked, role);
       saveSession({
         role,
         questions: picked.map((item) => item.question),
@@ -103,8 +115,7 @@ export default function RoleSelection() {
     }
   }
 
-  /** The generating sources. "mixed" lets saved questions displace generated ones. */
-  async function generate(saved: Bookmark[]): Promise<GeneratedQuestion[]> {
+  async function generate(): Promise<GeneratedQuestion[]> {
     const response = await fetch("/api/generate-questions", {
       method: "POST",
       headers: { "Content-Type": "application/json", ...openRouterHeaders() },
@@ -113,9 +124,7 @@ export default function RoleSelection() {
     const body = await response.json();
     if (!response.ok) throw new Error(body.error ?? "Could not generate questions.");
 
-    return loadSettings().source === "mixed"
-      ? pickQuestions(body.questions, saved, REUSE_CHANCE)
-      : body.questions;
+    return body.questions;
   }
 
   return (
@@ -123,7 +132,7 @@ export default function RoleSelection() {
       <div className="text-center">
         <h1 className="text-3xl font-semibold">Agent Interviewer</h1>
         <p className="mt-2 text-sm opacity-70">
-          Pick a role. You get {QUESTION_COUNT} questions, and each answer is scored on correctness,
+          Pick a role. You get questions, and each answer is scored on correctness,
           English and depth. Add your own
           {" "}
           <button onClick={openKeyDialog} className="underline underline-offset-2">
@@ -146,12 +155,18 @@ export default function RoleSelection() {
         ))}
       </div>
 
-      <button
-        onClick={openSettings}
-        className="self-center text-sm underline underline-offset-4 opacity-60 transition hover:opacity-100"
-      >
-        Settings
-      </button>
+      <div className="flex items-center justify-center gap-2 text-sm opacity-60">
+        <button
+          onClick={openSettings}
+          className="underline underline-offset-4 transition hover:opacity-100"
+        >
+          Settings
+        </button>
+        - 
+        <Link href="/cache" className="underline underline-offset-4 transition hover:opacity-100">
+          Cache
+        </Link>
+      </div>
 
       <dialog
         ref={dialog}
@@ -170,7 +185,7 @@ export default function RoleSelection() {
             <label className="flex flex-col gap-2">
               <span className="flex items-baseline justify-between text-sm">
                 <span className="opacity-60">Seniority</span>
-                <span className="font-medium">{LEVELS[levelIndex]}</span>
+                <span className="font-medium">{levelLabel(LEVELS[levelIndex]!)}</span>
               </span>
               <input
                 type="range"
@@ -179,19 +194,19 @@ export default function RoleSelection() {
                 step={1}
                 value={levelIndex}
                 onChange={(event) => setLevelIndex(Number(event.target.value))}
-                aria-valuetext={LEVELS[levelIndex]}
+                aria-valuetext={levelLabel(LEVELS[levelIndex]!)}
                 list="levels"
                 className="w-full accent-current"
               />
               {/* Renders native tick marks under the track. */}
               <datalist id="levels">
                 {LEVELS.map((name, i) => (
-                  <option key={name} value={i} label={name} />
+                  <option key={name} value={i} label={levelLabel(name)} />
                 ))}
               </datalist>
               <span className="flex justify-between text-xs opacity-50">
-                <span>{LEVELS[0]}</span>
-                <span>{LEVELS[LEVELS.length - 1]}</span>
+                <span>{levelLabel(LEVELS[0])}</span>
+                <span>{levelLabel(LEVELS[LEVELS.length - 1]!)}</span>
               </span>
             </label>
 
@@ -291,11 +306,10 @@ export default function RoleSelection() {
                   {label}
                 </option>
               ))}
-              {/* Listed so the plan is visible, disabled until it exists. */}
-              <option disabled>Ground truth (not implemented yet)</option>
             </select>
             <span className="text-xs opacity-50">
-              Only cache draws from bookmarked questions and spends no request.
+              Every generated question is cached. Only cache reuses those; ground truth uses a
+              fixed hand-written set. Neither spends a request.
             </span>
           </label>
 

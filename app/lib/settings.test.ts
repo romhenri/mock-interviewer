@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { FREE_MODELS } from "./models.ts";
-import { DEFAULT_SETTINGS, parse } from "./settings.ts";
+import { DEFAULT_SETTINGS, parse, SOURCES } from "./settings.ts";
 
 test("parse accepts a stored setting", () => {
   const stored = { model: FREE_MODELS[1], source: "cache" };
@@ -21,5 +21,11 @@ test("parse drops a model the fallback chain does not know", () => {
 });
 
 test("parse drops an unknown source rather than generating nothing", () => {
-  assert.equal(parse(JSON.stringify({ source: "ground-truth" })).source, DEFAULT_SETTINGS.source);
+  assert.equal(parse(JSON.stringify({ source: "telepathy" })).source, DEFAULT_SETTINGS.source);
+});
+
+test("parse accepts every source the dropdown offers", () => {
+  for (const source of Object.keys(SOURCES)) {
+    assert.equal(parse(JSON.stringify({ source })).source, source);
+  }
 });

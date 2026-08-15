@@ -73,14 +73,17 @@ an interview where you skip everything costs the single generation request.
    skipping look identical to answering wrongly. Answers whose scoring failed, or that are still in
    flight, are labelled as such and can be scored from a button rather than silently retried.
 
-The bookmark icon beside a question saves it to `localStorage` under `mock-interview-bookmarks`,
-along with its topic label, the role, and the full-credit answer the question was generated with.
-Settings → **Questions source** decides where a new interview draws from: *Complete generation*
-asks the model for a fresh set, *Only cache* draws from your bookmarks for that role and spends no
-request at all. A saved question is never used twice in the same interview.
+Every generated question is cached in `localStorage` under `mock-interview-bookmarks` — the
+question, its topic label, the role, and the full-credit answer it was generated with. Generation
+is the part that costs a request, so its output is always kept; the bookmark icon on the summary
+discards a question you do not want back (and puts it back if you change your mind). Settings →
+**Questions source** decides where a new interview draws from: *Complete generation* asks the model
+for a fresh set, *Only cache* draws from what is already stored for that role, and *Ground truth*
+draws from the fixed set in `app/public/data/ground-truth.json`. Neither of the last two spends a
+request. A cached question is never used twice in the same interview. `/cache` lists everything held.
 
 The interview session itself lives in `sessionStorage` under `mock-interview-session`. There is no
-database and no account. Closing the tab ends the interview; bookmarks outlive it.
+database and no account. Closing the tab ends the interview; the cache outlives it.
 
 **When a call fails, it fails.** No automatic retry, no fallback parsing of a mangled response, no
 defaulting a score to zero. A fabricated score is indistinguishable from a real one in the summary,

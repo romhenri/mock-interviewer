@@ -2,10 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import BookmarkButton from "@/components/BookmarkButton";
-import { ANSWER_LENGTH } from "@/lib/prompts";
 import { scoreAnswer } from "@/lib/scoring";
-import { clearSession, loadSession, saveSession, useSession } from "@/lib/session";
+import { loadSession, saveSession, useSession } from "@/lib/session";
 
 export default function Interview() {
   const router = useRouter();
@@ -58,33 +56,15 @@ export default function Interview() {
     if (isLast) router.push("/summary");
   }
 
-  /** Abandons the interview — the session is dropped so home starts fresh. */
-  function quit() {
-    clearSession();
-    router.push("/");
-  }
-
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-6">
-      <header className="flex items-center justify-between text-sm opacity-60">
-        <span>
-          {session.role} · question {index + 1} of {session.questions.length}
-        </span>
-        <button onClick={quit} className="transition hover:opacity-100">
-          ← Back home
-        </button>
+      {/* No way out but through: the exit lives on the summary, once there are
+          results to leave behind. Skip is how you get past a question. */}
+      <header className="text-sm opacity-60">
+        {session.role} · question {index + 1} of {session.questions.length}
       </header>
 
-      <div className="flex items-start gap-3">
-        <h1 className="flex-1 text-xl font-medium">{question}</h1>
-        {/* The model answer exists before the interview starts, so a question
-            bookmarked here is saved with it — no need to wait for the judge. */}
-        <BookmarkButton
-          question={question}
-          role={session.role}
-          suggestedAnswer={reference ?? undefined}
-        />
-      </div>
+      <h1 className="text-xl font-medium">{question}</h1>
 
       <textarea
         value={answer}
@@ -111,7 +91,7 @@ export default function Interview() {
       </div>
 
       <p className="text-xs opacity-50">
-        Scoring runs in the background — all results are shown at the end.
+        Scoring runs in the background. All results are shown at the end.
       </p>
     </main>
   );

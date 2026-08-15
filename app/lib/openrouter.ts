@@ -50,10 +50,12 @@ export async function chatJSON<T = unknown>(
   parse: (content: unknown) => T = (content) => content as T,
   preferredModel?: string,
 ): Promise<{ content: T; served: string }> {
+  // Reaches the browser verbatim (the routes return `error.message`), so it names
+  // what a candidate can actually do, never the repo's own setup.
   const apiKey = userApiKey || process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
     throw new Error(
-      "OPENROUTER_API_KEY is not set. Copy app/.env.local.example to app/.env.local and add your key.",
+      'No OpenRouter key set. Add yours with the "OpenRouter key" button on the home page.',
     );
   }
 
@@ -79,7 +81,7 @@ export async function chatJSON<T = unknown>(
 
   throw new Error(
     `Every free model failed or was rate-limited. ${failures.join(" | ")}. ` +
-      `The free pool is shared and heavily contended — adding credits at ` +
+      `The free pool is shared and heavily contended. Adding credits at ` +
       `https://openrouter.ai/settings/credits or your own provider key at ` +
       `https://openrouter.ai/settings/integrations removes this.`,
   );

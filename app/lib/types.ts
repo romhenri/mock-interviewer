@@ -20,20 +20,22 @@ export const ROLE_SUMMARY: Record<Role, string> = {
 };
 
 /** Ordered from least to most senior — the slider maps its value to an index here. */
-export const LEVELS = [
-  "Rookie",
-  "Intern",
-  "Entry",
-  "Junior",
-  "Mid",
-  "Senior",
-  "Staff",
-  "Principal",
-] as const;
+export const LEVELS = ["Rookie", "Entry", "Mid", "Senior"] as const;
 
 export type Level = (typeof LEVELS)[number];
 
 export const DEFAULT_LEVEL: Level = "Mid";
+
+/**
+ * What the slider shows, where it differs from what the prompt says. "Intern" is
+ * the word candidates recognise; "Rookie" is the word that makes a model pitch
+ * the questions low enough, so each side keeps the one that works.
+ */
+const LEVEL_LABEL: Partial<Record<Level, string>> = { Rookie: "Intern" };
+
+export function levelLabel(level: Level): string {
+  return LEVEL_LABEL[level] ?? level;
+}
 
 /** Subjects the candidate can narrow an interview to. Selecting none means "anything". */
 export const SUBJECTS: Record<Role, readonly string[]> = {
@@ -143,7 +145,7 @@ export const SUBJECTS: Record<Role, readonly string[]> = {
 
 /**
  * A question and the full-credit answer written in the same generation call.
- * `answer` is absent only on bookmarks saved before their question was scored.
+ * `answer` is absent only on questions cached before generation wrote one.
  */
 export type GeneratedQuestion = { question: string; answer?: string };
 
@@ -170,7 +172,7 @@ export type ScoreSlot = Score | ScoreError | null;
  *
  * `references` is filled at generation time and never grows: it is the full-credit
  * answer the judge scores questions[i] against. null where there is none — a reused
- * bookmark saved before answers came with the question.
+ * cached question from before answers came with the question.
  */
 export type Session = {
   role: Role;

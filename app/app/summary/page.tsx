@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import BookmarkButton from "@/components/BookmarkButton";
+import CacheButton from "@/components/CacheButton";
 import { averageScores, CRITERIA, isScore } from "@/lib/score";
 import { scoreAnswer, usePendingScores } from "@/lib/scoring";
 import { clearSession, loadSession, useSession } from "@/lib/session";
@@ -42,14 +42,24 @@ export default function Summary() {
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 p-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Interview summary</h1>
-        <p className="mt-1 text-sm opacity-60">
-          {session.role} · {attempted} of {session.answers.length} questions answered
-          {attempted < session.answers.length &&
-            ` · ${session.answers.length - attempted} skipped`}
-          {stillScoring && ` · ${pending.size} still being scored`}
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Interview summary</h1>
+          <p className="mt-1 text-sm opacity-60">
+            {session.role} · {attempted} of {session.answers.length} questions answered
+            {attempted < session.answers.length &&
+              ` · ${session.answers.length - attempted} skipped`}
+            {stillScoring && ` · ${pending.size} still being scored`}
+          </p>
+        </div>
+        {/* Leaves the session alone, so the results are still here on the way back.
+            "Start over" at the foot of the page is the one that throws them away. */}
+        <button
+          onClick={() => router.push("/")}
+          className="shrink-0 text-sm opacity-60 transition hover:opacity-100"
+        >
+          ← Back home
+        </button>
       </div>
 
       <section className="rounded-lg border border-current/20 p-4">
@@ -100,7 +110,7 @@ export default function Summary() {
                 <h3 className="flex-1 text-sm font-medium">
                   {index + 1}. {question}
                 </h3>
-                <BookmarkButton
+                <CacheButton
                   question={question}
                   role={session!.role}
                   suggestedAnswer={reference ?? (isScore(slot) ? slot.suggestedAnswer : undefined)}
@@ -111,7 +121,7 @@ export default function Summary() {
                 <p className="mt-3 text-sm opacity-50">Not reached.</p>
               ) : answer === null ? (
                 <>
-                  <p className="mt-3 text-sm opacity-50">Skipped — not answered, not scored.</p>
+                  <p className="mt-3 text-sm opacity-50">Skipped, not answered, not scored.</p>
                   {/* The answer was written with the question, so a skip still gets
                       to see it — no scoring request needed. */}
                   {reference && (

@@ -8,8 +8,8 @@ const KEY = "mock-interview-settings";
 /** Where a new interview's questions come from. Values are stored, labels are shown. */
 export const SOURCES = {
   generate: "Complete generation",
-  mixed: "Mixed with cache",
   cache: "Only cache",
+  truth: "Ground truth",
 } as const;
 
 export type Source = keyof typeof SOURCES;
@@ -20,8 +20,7 @@ export type Settings = {
   source: Source;
 };
 
-/** Mixed is the default because it is what the app did before Settings existed. */
-export const DEFAULT_SETTINGS: Settings = { model: null, source: "mixed" };
+export const DEFAULT_SETTINGS: Settings = { model: null, source: "generate" };
 
 /** localStorage (not sessionStorage): a preference should outlive the tab. */
 export function loadSettings(): Settings {
