@@ -6,7 +6,11 @@ const valid = {
   correctness: 80,
   english: 60,
   depth: 40,
-  feedback: "Solid.",
+  feedback: {
+    correctness: "Named the right mechanism.",
+    english: "You said 'devluper'; the word is 'developer'.",
+    depth: "Did not say why it matters under load.",
+  },
   suggestedAnswer: "A reverse proxy terminates client connections on behalf of backend servers.",
 };
 
@@ -22,6 +26,11 @@ test("parseScore rejects out-of-range scores rather than clamping them", () => {
 test("parseScore rejects missing or non-numeric criteria", () => {
   assert.throws(() => parseScore({ ...valid, depth: "high" }), /depth/);
   assert.throws(() => parseScore({ correctness: 1, english: 1, depth: 1 }), /feedback/);
+  // Feedback is per criterion: a missing line is as invalid as a missing score.
+  assert.throws(
+    () => parseScore({ ...valid, feedback: { ...valid.feedback, english: "" } }),
+    /english feedback/,
+  );
   assert.throws(() => parseScore(null), /score object/);
 });
 

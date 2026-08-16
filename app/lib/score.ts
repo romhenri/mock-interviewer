@@ -1,4 +1,4 @@
-import type { Score, ScoreSlot } from "./types";
+import type { Feedback, Score, ScoreSlot } from "./types";
 
 export const CRITERIA = ["correctness", "english", "depth"] as const;
 
@@ -28,15 +28,22 @@ export function parseScore(raw: unknown, reference?: string | null): Score {
     }
     scores[criterion] = value;
   }
-  if (typeof candidate.feedback !== "string" || !candidate.feedback.trim()) {
-    throw new Error("Judge returned no feedback.");
+  // Feedback is per criterion, so a line can sit under the number it explains.
+  const rawFeedback = (candidate.feedback ?? {}) as Record<string, unknown>;
+  const feedback = {} as Feedback;
+  for (const criterion of CRITERIA) {
+    const line = rawFeedback[criterion];
+    if (typeof line !== "string" || !line.trim()) {
+      throw new Error(`Judge returned no ${criterion} feedback.`);
+    }
+    feedback[criterion] = line;
   }
   const suggestedAnswer = reference?.trim() || candidate.suggestedAnswer;
   if (typeof suggestedAnswer !== "string" || !suggestedAnswer.trim()) {
     throw new Error("Judge returned no suggested answer.");
   }
 
-  return { ...scores, feedback: candidate.feedback, suggestedAnswer };
+  return { ...scores, feedback, suggestedAnswer };
 }
 
 /** Narrows a stored slot to a real score — excludes skipped, pending and failed. */

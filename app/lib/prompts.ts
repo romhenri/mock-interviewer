@@ -87,6 +87,7 @@ Bad — too broad to answer in ${ANSWER_LENGTH}:
  */
 export function scoreSchema(withSuggestedAnswer: boolean) {
   const criteria = { type: "integer", minimum: 0, maximum: 100 };
+  const line = { type: "string" };
   const suggested = withSuggestedAnswer ? { suggestedAnswer: { type: "string" } } : {};
 
   return {
@@ -97,7 +98,12 @@ export function scoreSchema(withSuggestedAnswer: boolean) {
         correctness: criteria,
         english: criteria,
         depth: criteria,
-        feedback: { type: "string" },
+        feedback: {
+          type: "object",
+          properties: { correctness: line, english: line, depth: line },
+          required: ["correctness", "english", "depth"],
+          additionalProperties: false,
+        },
         ...suggested,
       },
       required: ["correctness", "english", "depth", "feedback", ...Object.keys(suggested)],
@@ -142,9 +148,15 @@ Score the answer on three independent criteria, each from 0 to 100:
 Score the criteria independently — a wrong answer in fluent English scores high on english and low
 on correctness, and a correct answer in broken English scores the reverse. Judge only what the candidate actually said; do not credit knowledge they did not show.
 
-Then write two or three sentences of feedback: what was strong, and the single most valuable thing
-they left out. If the English got in the way, say so concretely — quote the phrase and give the
-natural version. Do not tell them to write more.
+Then write feedback as one line per criterion, each one or two sentences, explaining the number you
+gave that criterion and nothing else:
+- feedback.correctness: what was right, and the wrong claim that cost them, if any.
+- feedback.english: the language only. Quote the phrase that was off and give the natural version —
+  "You said 'devluper'; the word is 'developer'." If the English was clean, say that in one line.
+- feedback.depth: the single most valuable mechanism they left out, or that they named it.
+
+Keep each line about its own criterion — never mention missing content under english, or grammar
+under correctness. Do not tell them to write more.
 ${
   reference
     ? ""

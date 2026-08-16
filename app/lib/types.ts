@@ -149,11 +149,14 @@ export const SUBJECTS: Record<Role, readonly string[]> = {
  */
 export type GeneratedQuestion = { question: string; answer?: string };
 
+/** One line of feedback per criterion, so each number says why it is what it is. */
+export type Feedback = { correctness: string; english: string; depth: string };
+
 export type Score = {
   correctness: number;
   english: number;
   depth: number;
-  feedback: string;
+  feedback: Feedback;
   suggestedAnswer: string;
   /** Which model actually judged — the chain falls back, so it varies. */
   model?: string;

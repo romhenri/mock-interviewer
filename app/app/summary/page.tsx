@@ -117,6 +117,18 @@ export default function Summary() {
                 />
               </div>
 
+              {/* The answer sits with the question it answers, above the judging. */}
+              {answer !== null && answer !== undefined && (
+                <details className="mt-3">
+                  <summary className="cursor-pointer text-sm opacity-60 hover:opacity-100">
+                    Your answer
+                  </summary>
+                  <p className="mt-2 rounded-lg border border-current/15 p-3 text-sm opacity-80">
+                    {answer}
+                  </p>
+                </details>
+              )}
+
               {answer === undefined ? (
                 <p className="mt-3 text-sm opacity-50">Not reached.</p>
               ) : answer === null ? (
@@ -125,39 +137,40 @@ export default function Summary() {
                   {/* The answer was written with the question, so a skip still gets
                       to see it — no scoring request needed. */}
                   {reference && (
-                    <details className="mt-3">
-                      <summary className="cursor-pointer text-sm opacity-60 hover:opacity-100">
-                        Suggested answer
-                      </summary>
+                    <div className="mt-3">
+                      <h4 className="text-sm opacity-60">Suggested answer</h4>
                       <p className="mt-2 rounded-lg border border-current/15 p-3 text-sm opacity-80">
                         {reference}
                       </p>
-                    </details>
+                    </div>
                   )}
                 </>
               ) : pending.has(index) ? (
                 <p className="mt-3 text-sm opacity-60">Scoring…</p>
               ) : isScore(slot) ? (
                 <>
-                  <dl className="mt-3 flex gap-6 text-sm">
+                  {/* One block per criterion: its score and the line that explains it. */}
+                  <dl className="mt-3 flex flex-col gap-2 text-sm">
                     {CRITERIA.map((criterion) => (
-                      <div key={criterion} className="flex gap-2">
-                        <dt className="capitalize opacity-60">{criterion}</dt>
-                        <dd className={`font-semibold tabular-nums ${tone(slot[criterion]).text}`}>
-                          {slot[criterion]}
-                        </dd>
+                      <div key={criterion}>
+                        <dt className="flex items-baseline gap-2">
+                          <span className="font-semibold capitalize">{criterion}</span>
+                          <span
+                            className={`font-semibold tabular-nums ${tone(slot[criterion]).text}`}
+                          >
+                            {slot[criterion]}
+                          </span>
+                        </dt>
+                        <dd className="opacity-80">{slot.feedback[criterion]}</dd>
                       </div>
                     ))}
                   </dl>
-                  <p className="mt-3 text-sm opacity-80">{slot.feedback}</p>
-                  <details className="mt-3">
-                    <summary className="cursor-pointer text-sm opacity-60 hover:opacity-100">
-                      Suggested answer
-                    </summary>
+                  <div className="mt-3">
+                    <h4 className="text-sm opacity-60">Suggested answer</h4>
                     <p className="mt-2 rounded-lg border border-current/15 p-3 text-sm opacity-80">
                       {slot.suggestedAnswer}
                     </p>
-                  </details>
+                  </div>
                 </>
               ) : (
                 <div className="mt-3 flex flex-col items-start gap-2">
@@ -175,15 +188,6 @@ export default function Summary() {
                     Score this answer
                   </button>
                 </div>
-              )}
-
-              {answer !== null && answer !== undefined && (
-                <details className="mt-3">
-                  <summary className="cursor-pointer text-xs opacity-50 hover:opacity-80">
-                    Your answer
-                  </summary>
-                  <p className="mt-2 text-sm opacity-70">{answer}</p>
-                </details>
               )}
             </article>
           );
