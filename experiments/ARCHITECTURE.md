@@ -17,11 +17,11 @@ scripts that sit outside the DAG on purpose.
    │ question_experiments │ ◀─────▶ │ OpenRouter API │
    └──────────────────────┘         └────────────────┘
                │
-               │
-               ▼ JSONL
-     ┌──────────────────┐
-     │ experiments/data │
-     └──────────────────┘
+               ├────────────────────────┐
+               ▼ JSONL                  ▼ kedro-mlflow
+     ┌──────────────────┐     ┌────────────────────┐
+     │ experiments/data │     │ mlflow.db, mlruns/ │
+     └──────────────────┘     └────────────────────┘
 ```
 
 Vertical arrows are one-way: code depends downward, and `data/` is where the run ends up.
@@ -41,6 +41,17 @@ they are downstream of it by data, not by import.
 **question_experiments** — `src/question_experiments/`. `prompts.py` (prompt v1 plus
 `config_hash`), `openrouter.py` (pinned model, one retry, no fallback), `store.py` (append-only
 JSONL and run manifests).
+
+**mlflow.db / mlruns/** — the MLflow tracking store, written by the kedro-mlflow plugin plus
+the explicit logging in `nodes.py`. One MLflow run per `kedro run`, carrying the resolved
+config as params, per-model latency and coverage as metrics, the manifest, the prompt and a
+questions table as artifacts, and one trace span per model request. `metrics.py --mlflow` adds
+the human ratings to those runs afterwards. [MLFLOW-HOWTO.md](MLFLOW-HOWTO.md) is the usage
+guide, [conf/base/mlflow.yml](conf/base/mlflow.yml) the settings.
+
+A **view**, not a record — both paths are gitignored and rebuildable, and nothing reads from
+them. `data/` below stays the source of truth, which is why the plugin's own dataset types are
+not used: a result that only exists inside MLflow would be a result the rater cannot reach.
 
 **experiments/data** — `questions.jsonl`, `ratings.jsonl`, `runs/<run_id>/manifest.yml`.
 Append-only, which is what lets re-running the pipeline never overwrite hand-collected ratings.

@@ -305,6 +305,20 @@ def test_short_responses_are_kept_not_discarded():
     assert metrics._coverage(rows) == 2 / 3, "the gap must stay visible, not vanish"
 
 
+def test_mlflow_metrics_agree_with_the_report():
+    """The per-model metrics logged at run time must mean what the same-named columns in
+    metrics.py mean, or the UI and the report disagree about the same run."""
+    config = build_run_config(PARAMS)
+    rows = _question_rows(config, config["models"][0], _answers(["RAG", "Attention"]), latency_ms=100)
+    rows.append(nodes._failure_row(config, config["models"][1], "rate limited"))
+
+    logged = nodes._per_model_metrics(rows, config)
+    assert logged[f"covered.{config['models'][0]}"] == metrics._coverage(rows[:2]) == 2 / 3
+    assert logged[f"latency_ms.{config['models'][0]}"] == 100
+    assert logged[f"failed.{config['models'][1]}"] == 1
+    assert f"latency_ms.{config['models'][1]}" not in logged, "a failed request has no latency"
+
+
 def test_latest_rating_wins_per_rater():
     rows = [
         {"question_id": "q1", "rating": 2, "rater": "ana"},

@@ -1,0 +1,52 @@
+# kedro-mlflow. Tracked in conf/base rather than conf/local (where `kedro mlflow init` puts
+# it) because the tracking layout is part of the experiment definition: a teammate who
+# clones this and runs the pipeline must land in the same experiment, not in a Default one.
+#
+#     .venv/bin/mlflow ui --backend-store-uri sqlite:///mlflow.db   # http://127.0.0.1:5000
+#
+# `kedro mlflow ui` runs that same line from these settings, but only with the venv activated:
+# it looks `mlflow` up on PATH. See MLFLOW-HOWTO.md.
+#
+# Run metadata lands in experiments/mlflow.db, artifacts and traces in experiments/mlruns/
+# (both gitignored — sqlite holds the metadata, the artifact root stays a directory).
+# They are a view, not the record: data/questions.jsonl and data/runs/<run_id>/manifest.yml
+# stay the source of truth, and deleting both loses nothing that a re-run of the pipeline
+# and `metrics.py --mlflow` cannot rebuild.
+
+server:
+  # Not the `mlruns` file store kedro-mlflow defaults to: mlflow 3.15 refuses to open one
+  # ("in maintenance mode") unless MLFLOW_ALLOW_FILE_STORE is set, and traces are exactly the
+  # feature that backend is not getting updates for. sqlite is the supported local backend.
+  #
+  # Relative, so it is the same path on every machine — and therefore resolved against the
+  # working directory, which is why kedro and the ui must be run from experiments/. metrics.py
+  # resolves it against the project root instead, since it is run from anywhere.
+  mlflow_tracking_uri: sqlite:///mlflow.db
+
+tracking:
+  experiment:
+    name: question_experiments
+
+  run:
+    # The pipeline name. `kedro run` alone reads "__default__", which is what it is.
+    name: null
+
+  params:
+    dict_params:
+      # Left unflattened on purpose. The only parameter is the `experiment` dict, and
+      # flattening it would log `experiment.role` from conf/base even on a run launched with
+      # `--params experiment.config=...`, where the config file replaced every one of those
+      # values (see store.named_config). That column would be a lie in the UI.
+      #
+      # `build_run_config` logs the *resolved* config as params instead, so what MLflow shows
+      # is what the models were actually asked. This dict lands as a tag: the raw yaml as it
+      # stood at run time, kept for the record and out of the way.
+      flatten: False
+    long_params_strategy: tag # a custom `prompt:` is well past mlflow's 250-char param limit
+
+ui:
+  # Not mlflow's default 5000: macOS AirPlay Receiver listens on that port on *both* stacks,
+  # while mlflow binds IPv4 only. `localhost` resolves to ::1 in a browser, so the request
+  # lands on AirPlay and comes back 403 — the server is fine, nothing reaches it.
+  port: "5005"
+  host: "127.0.0.1"

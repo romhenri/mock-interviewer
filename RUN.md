@@ -28,4 +28,6 @@ cp .env.example .env       # its own OPENROUTER_API_KEY, not the app's
 .venv/bin/python trace.py  # write conf/experiments/*.yml for configs already run
 .venv/bin/python rate.py   # rate 1-5, blind, resumable
 .venv/bin/python metrics.py
+.venv/bin/python metrics.py --mlflow   # write the ratings onto the MLflow runs
+.venv/bin/mlflow ui --backend-store-uri sqlite:///mlflow.db --port 5005   # from experiments/
 ```

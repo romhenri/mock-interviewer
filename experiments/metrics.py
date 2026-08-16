@@ -8,6 +8,7 @@ into a number that means nothing.
 
     python metrics.py
     python metrics.py --config-hash a1b2c3d4e5f6
+    python metrics.py --mlflow          # also write the ratings back onto the MLflow runs
 """
 
 from __future__ import annotations
@@ -85,9 +86,64 @@ def _coverage(produced: list[dict]) -> float | None:
     return statistics.fmean(len(subjects) / sizes[run] for run, subjects in per_run.items())
 
 
+def to_mlflow(questions: list[dict], ratings: dict[tuple[str, str], int]) -> None:
+    """Logs each run's quality onto the MLflow run the pipeline opened for it.
+
+    A rating arrives hours or days after the run that produced the question, so quality cannot
+    be logged where latency and coverage are. This closes that loop: the existing run is
+    reopened by its `run_id` param and the quality metrics are added to it, which is what
+    makes the MLflow table complete — one row per run, objective columns beside rated ones.
+
+    Per run rather than pooled per config_hash, because an MLflow run *is* a kedro run. The
+    pooled view is the table this script prints; averaging four runs into each of them would
+    put the same number on four rows and call it four measurements.
+
+    Re-running appends to each metric's history instead of replacing it, so a partly-rated
+    run charts its quality settling as more ratings come in.
+    """
+    import mlflow  # imported here: the report itself must keep working without mlflow installed
+    import yaml
+
+    # Read rather than repeated, so the ui, the pipeline and this script cannot end up
+    # pointing at three different databases. The path inside the uri is relative to the
+    # project root — kedro is always run from there, this script is not, so it is resolved
+    # here rather than left to the working directory.
+    config = yaml.safe_load((store.ROOT / "conf" / "base" / "mlflow.yml").read_text())
+    uri = config["server"]["mlflow_tracking_uri"]
+    mlflow.set_tracking_uri(uri.replace("sqlite:///", f"sqlite:///{store.ROOT}/", 1))
+    mlflow.set_experiment(config["tracking"]["experiment"]["name"])
+
+    by_run: dict[str, list[dict]] = defaultdict(list)
+    for row in questions:
+        by_run[row["run_id"]].append(row)
+
+    for run_id, rows in sorted(by_run.items()):
+        found = mlflow.search_runs(filter_string=f"params.run_id = '{run_id}'", output_format="list")
+        if not found:
+            # Runs from before mlflow was wired in, and runs whose mlruns/ was deleted. Their
+            # questions and ratings are intact on disk; only the UI row is missing.
+            print(f"  skip {run_id}: no mlflow run")
+            continue
+
+        summary = [row for row in summarise(rows, ratings) if row["n_rated"]]
+        if not summary:
+            continue
+
+        with mlflow.start_run(run_id=found[0].info.run_id):
+            mlflow.log_metrics(
+                {
+                    f"{key}.{row['model']}": row[metric]
+                    for row in summary
+                    for key, metric in (("quality", "mean_quality"), ("rated", "n_rated"))
+                }
+            )
+        print(f"  logged {run_id}: {len(summary)} model(s)")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config-hash", help="report only this config")
+    parser.add_argument("--mlflow", action="store_true", help="log quality onto the MLflow runs")
     args = parser.parse_args()
 
     questions = store.read(store.QUESTIONS)
@@ -116,6 +172,9 @@ def main() -> int:
 
     if not ratings:
         print("\nNothing rated yet — run `python rate.py`. Only the objective columns are filled in.")
+    elif args.mlflow:
+        print("\nmlflow:")
+        to_mlflow([row for rows in groups.values() for row in rows], ratings)
     return 0
 
 

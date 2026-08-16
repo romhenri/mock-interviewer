@@ -3,3 +3,6 @@
 __pycache__/
 *.egg-info/
 conf/local/
+# A view of data/, rebuildable from it. The runs are the record, mlflow is how they read.
+mlflow.db
+mlruns/

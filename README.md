@@ -57,6 +57,9 @@ so the app shows the error and lets you decide whether to spend another request.
 `experiments/` is a Kedro pipeline measuring **question quality**, the thing this product lives or
 dies on. Every free OpenRouter model writes questions for the same 15-subject assignment, a human
 rates each one 1–5 blind, and results accumulate so any run can be compared with any future run.
+Every run is tracked in MLflow through kedro-mlflow, so the UI shows the configs side by side,
+the per-model numbers, and a trace of each model's request —
+[experiments/MLFLOW-HOWTO.md](experiments/MLFLOW-HOWTO.md).
 
 It is isolated from the app — its own venv, its own key, its own copy of the prompt. It never
 imports from `app/`, so a finding reaches production only when someone hand-ports it into

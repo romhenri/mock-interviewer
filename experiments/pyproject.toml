@@ -8,7 +8,9 @@ version = "0.1.0"
 requires-python = ">=3.10"
 # PyYAML is a kedro dependency too, but store.py imports it directly — a transitive
 # dependency is not a promise.
-dependencies = ["kedro~=1.5.0", "PyYAML>=6"]
+# kedro-datasets is imported by kedro-mlflow's hook and not declared by it, so a fresh
+# install without it fails on the first `kedro run`.
+dependencies = ["kedro~=1.5.0", "kedro-mlflow~=2.0", "kedro-datasets", "PyYAML>=6"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

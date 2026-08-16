@@ -5,10 +5,33 @@ from __future__ import annotations
 import datetime as dt
 import random
 import uuid
+from contextlib import contextmanager
+
+import mlflow
 
 from question_experiments import store
 from question_experiments.openrouter import FatalError, GenerationError, chat_json, load_api_key
 from question_experiments.prompts import CLIENT_SETTINGS, PROMPT_VERSION, render
+
+
+def _tracking() -> bool:
+    """Whether kedro-mlflow has a run open around this node.
+
+    Every mlflow call below is guarded by it, because the tests call these nodes directly and
+    `log_metric` with no active run does not no-op — it opens one, filing test fixtures in the
+    same experiment as real results.
+    """
+    return mlflow.active_run() is not None
+
+
+@contextmanager
+def _span(name: str, **kwargs):
+    """One trace span per request, or nothing at all when not tracking. See `_tracking`."""
+    if not _tracking():
+        yield None
+        return
+    with mlflow.start_span(name=name, **kwargs) as span:
+        yield span
 
 
 def build_run_config(params: dict) -> dict:
@@ -40,7 +63,7 @@ def build_run_config(params: dict) -> dict:
     # ratings and overwrite its manifest.
     run_id = f"{started.strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:6]}"
 
-    return {
+    config = {
         "run_id": run_id,
         "started_at": started.isoformat(),
         # The file this run came from, if it came from one. `config_hash` says two runs are
@@ -62,6 +85,24 @@ def build_run_config(params: dict) -> dict:
         "models": params["models"],
     }
 
+    if _tracking():
+        # The resolved config, not conf/base — a run launched with `experiment.config=x` took
+        # every value from that file. `config_hash` is the one to filter the UI on: it is what
+        # says two runs measured the same task and may be compared.
+        mlflow.log_params(
+            {
+                key: config[key]
+                for key in ("run_id", "config", "config_hash", "prompt_version", "role", "level",
+                            "answer_length", *CLIENT_SETTINGS)
+            }
+            | {"n_subjects": len(subjects), "n_models": len(config["models"])}
+        )
+        # Long and never filtered on, so they are artifacts rather than params: the prompt is
+        # past mlflow's 250-char limit on its own, and the lists are what the manifest is for.
+        mlflow.log_text(prompt, "prompt.txt")
+
+    return config
+
 
 def generate_questions(config: dict) -> list[dict]:
     """One request per model, each pinned — no fallback chain.
@@ -77,27 +118,41 @@ def generate_questions(config: dict) -> list[dict]:
     rows: list[dict] = []
 
     for model in config["models"]:
-        try:
-            body, latency_ms = chat_json(
-                model,
-                config["prompt"],
-                config["schema"],
-                api_key,
-                **{key: config[key] for key in CLIENT_SETTINGS},
-            )
-        except FatalError:
-            # A rejected key is not a result about this model. Recording it as one would
-            # file five identical "failures" and invite the conclusion that every model
-            # is broken.
-            raise
-        except GenerationError as error:
-            rows.append(_failure_row(config, model, str(error)))
-            continue
+        # One span per request, so MLflow's trace view shows what each model was sent, what it
+        # sent back and how long it took — including the failures, which are the rows a
+        # rating pass never sees and the ones worth reading a trace for.
+        with _span(model, span_type="LLM") as span:
+            if span:
+                span.set_inputs({"model": model, "prompt": config["prompt"]})
+            try:
+                body, latency_ms = chat_json(
+                    model,
+                    config["prompt"],
+                    config["schema"],
+                    api_key,
+                    **{key: config[key] for key in CLIENT_SETTINGS},
+                )
+            except FatalError:
+                # A rejected key is not a result about this model. Recording it as one would
+                # file five identical "failures" and invite the conclusion that every model
+                # is broken.
+                raise
+            except GenerationError as error:
+                rows.append(_failure_row(config, model, str(error)))
+                if span:
+                    span.set_outputs({"error": str(error)})
+                continue
 
-        questions = body.get("questions")
-        if not isinstance(questions, list) or not questions:
-            rows.append(_failure_row(config, model, f"no questions in response: {str(body)[:120]}"))
-            continue
+            questions = body.get("questions")
+            if not isinstance(questions, list) or not questions:
+                failure = f"no questions in response: {str(body)[:120]}"
+                rows.append(_failure_row(config, model, failure))
+                if span:
+                    span.set_outputs({"error": failure})
+                continue
+
+            if span:
+                span.set_outputs({"questions": questions, "latency_ms": latency_ms})
 
         # A short response is kept, not discarded. A strict schema guarantees a count only
         # when the provider honours it, and the free pool includes providers that do not —
@@ -184,5 +239,47 @@ def persist_run(rows: list[dict], config: dict) -> dict:
         "failed_models": failed,
         "prompt": config["prompt"],
     }
-    store.write_manifest(config["run_id"], summary)
+    path = store.write_manifest(config["run_id"], summary)
+
+    if _tracking():
+        mlflow.log_artifact(str(path))
+        mlflow.log_metrics(
+            {
+                "questions_written": summary["questions_written"],
+                "models_failed": len(failed),
+                **_per_model_metrics(rows, config),
+            }
+        )
+        # The questions themselves, as a table rather than a blob: MLflow renders it, so the
+        # run is readable in the UI without opening data/questions.jsonl beside it. This is a
+        # view of the JSONL, never the record — `store.append` above is that.
+        mlflow.log_table(
+            {
+                key: [row[key] for row in rows]
+                for key in ("model", "subject", "text", "suggested_answer", "latency_ms", "error")
+            },
+            "questions.json",
+        )
+
     return summary
+
+
+def _per_model_metrics(rows: list[dict], config: dict) -> dict[str, float]:
+    """`latency_ms.<model>` and `covered.<model>`, so the UI can chart models against each other.
+
+    Objective columns only. Quality is a human rating that does not exist yet when this run
+    ends — `metrics.py --mlflow` logs it back onto this run once someone has rated it.
+
+    Coverage is distinct subjects over subjects assigned, the same definition metrics.py uses:
+    a model that writes three questions about RAG and skips Diffusion Models produced a full
+    set of rows while covering less of the assignment.
+    """
+    metrics = {}
+    for model in config["models"]:
+        produced = [row for row in rows if row["model"] == model and not store.failed(row)]
+        if not produced:
+            metrics[f"failed.{model}"] = 1
+            continue
+        metrics[f"latency_ms.{model}"] = produced[0]["latency_ms"]
+        metrics[f"covered.{model}"] = len({row["subject"] for row in produced}) / len(config["subjects"])
+    return metrics
