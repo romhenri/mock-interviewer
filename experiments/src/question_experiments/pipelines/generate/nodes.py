@@ -3,16 +3,12 @@
 from __future__ import annotations
 
 import datetime as dt
+import random
 import uuid
 
 from question_experiments import store
 from question_experiments.openrouter import FatalError, GenerationError, chat_json, load_api_key
-from question_experiments.prompts import (
-    PROMPT_VERSION,
-    config_hash,
-    questions_prompt,
-    questions_schema,
-)
+from question_experiments.prompts import CLIENT_SETTINGS, PROMPT_VERSION, render
 
 
 def build_run_config(params: dict) -> dict:
@@ -22,12 +18,20 @@ def build_run_config(params: dict) -> dict:
     as much as the model, so it is rendered here and passed down rather than rebuilt
     per model.
     """
+    params = store.named_config(params)
+
     subjects = params["subjects"]
     if len(set(subjects)) != len(subjects):
         raise ValueError(f"duplicate subjects in parameters: {subjects}")
 
-    prompt = questions_prompt(params["role"], params["level"], subjects)
-    schema = questions_schema(subjects)
+    # Seeded, so the sample is a property of the config rather than of the moment the run
+    # started: every model in the run gets the same three subjects (that is the whole
+    # design), and tomorrow's run gets them too, so its rows pool with today's instead of
+    # landing in a table of one. An unseeded sample would move config_hash every run.
+    if params.get("sample"):
+        subjects = random.Random(params["sample_seed"]).sample(subjects, params["sample"])
+
+    prompt, schema, hashed = render(params, subjects)
     started = dt.datetime.now(dt.timezone.utc)
 
     # Timestamp for sortability, random suffix for uniqueness. Seconds alone collide when
@@ -39,8 +43,17 @@ def build_run_config(params: dict) -> dict:
     return {
         "run_id": run_id,
         "started_at": started.isoformat(),
-        "config_hash": config_hash(prompt, schema),
-        "prompt_version": PROMPT_VERSION,
+        # The file this run came from, if it came from one. `config_hash` says two runs are
+        # comparable; this says which config a human can re-run to get more of them.
+        "config": params.get("config"),
+        "config_hash": hashed,
+        # The template a custom prompt came from, kept apart from the rendered text: only
+        # the template can be re-rendered for another subject list, and only the rendered
+        # text says what the models were actually asked. `trace.py` needs the first one.
+        "prompt_version": PROMPT_VERSION if params.get("prompt") is None else "custom",
+        "prompt_template": params.get("prompt"),
+        "answer_length": params.get("answer_length"),
+        **{key: params.get(key) for key in CLIENT_SETTINGS},
         "prompt": prompt,
         "schema": schema,
         "role": params["role"],
@@ -65,7 +78,13 @@ def generate_questions(config: dict) -> list[dict]:
 
     for model in config["models"]:
         try:
-            body, latency_ms = chat_json(model, config["prompt"], config["schema"], api_key)
+            body, latency_ms = chat_json(
+                model,
+                config["prompt"],
+                config["schema"],
+                api_key,
+                **{key: config[key] for key in CLIENT_SETTINGS},
+            )
         except FatalError:
             # A rejected key is not a result about this model. Recording it as one would
             # file five identical "failures" and invite the conclusion that every model
@@ -151,8 +170,12 @@ def persist_run(rows: list[dict], config: dict) -> dict:
     summary = {
         "run_id": config["run_id"],
         "started_at": config["started_at"],
+        "config": config["config"],
         "config_hash": config["config_hash"],
         "prompt_version": config["prompt_version"],
+        "prompt_template": config["prompt_template"],
+        "answer_length": config["answer_length"],
+        **{key: config[key] for key in CLIENT_SETTINGS},
         "role": config["role"],
         "level": config["level"],
         "models": config["models"],

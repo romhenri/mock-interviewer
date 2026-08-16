@@ -141,6 +141,9 @@ function render() {
     if (r.error) failed.set(r.model, r.error);
     else if (r.subject) at.set(r.subject + " " + r.model, r);
   }
+  // The file is append-only, so a model's old failure row outlives the re-run that fixed
+  // it. Produced questions anywhere in this config means the model is not a failed model.
+  for (const r of rows) if (!r.error) failed.delete(r.model);
 
   // Models that produced nothing go last — they have no questions to compare, and left
   // of the ones that do they push the actual comparison off the screen.

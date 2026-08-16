@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import pathlib
 import tempfile
+import time
 
 import yaml
 
@@ -22,7 +23,13 @@ from question_experiments.pipelines.generate.nodes import (
     build_run_config,
     persist_run,
 )
-from question_experiments.openrouter import FatalError, GenerationError
+from question_experiments import openrouter, prompts
+from question_experiments.openrouter import (
+    FatalError,
+    GenerationError,
+    _read_within,
+    chat_json,
+)
 from question_experiments.prompts import config_hash, questions_prompt, questions_schema
 
 SUBJECTS = ["RAG", "Attention", "Tokenization"]
@@ -73,6 +80,166 @@ def test_duplicate_subjects_are_rejected():
     except ValueError:
         return
     raise AssertionError("duplicate subjects must fail loudly — they break one-per-subject")
+
+
+def test_sampled_subjects_are_the_same_for_every_run():
+    """`sample` shrinks the assignment to the app's 3 questions. It is seeded because an
+    unseeded sample would move config_hash every run, and a latency measured once per
+    config is not a measurement."""
+    params = {**PARAMS, "subjects": SUBJECTS + ["RNNs", "CNNs"], "sample": 3, "sample_seed": 1}
+    first = build_run_config(params)
+    assert len(first["subjects"]) == 3
+    assert set(first["subjects"]) <= set(params["subjects"])
+    assert len(set(first["subjects"])) == 3, "a subject asked twice wastes a slot"
+    # Same config, later run: same subjects, same hash, so the rows pool.
+    assert build_run_config(params)["config_hash"] == first["config_hash"]
+    # A different assignment is a different task and must not pool with it.
+    assert build_run_config({**params, "sample_seed": 2})["config_hash"] != first["config_hash"]
+    assert build_run_config({**params, "sample": None})["config_hash"] != first["config_hash"]
+
+
+def test_extra_config_fields_change_the_hash_but_defaults_never_do():
+    """The knobs a config can turn (prompt, answer_length, request) all move the hash, or
+    two incomparable runs would pool. Taking the defaults must leave the hash exactly where
+    it was before those knobs existed, or every traced config breaks the day one is added."""
+    base = {"role": "AI Engineer", "level": "Mid", "subjects": SUBJECTS}
+    _, _, hashed = prompts.render(base)
+    assert hashed == config_hash(questions_prompt("AI Engineer", "Mid", SUBJECTS), questions_schema(SUBJECTS))
+    # Unset, empty and explicitly-default are all the same task.
+    for quiet in ({"request": None}, {"request": {}}, {"answer_length": prompts.ANSWER_LENGTH}):
+        assert prompts.render({**base, **quiet})[2] == hashed
+
+    assert prompts.render({**base, "timeout": None, "retry": None})[2] == hashed
+    # `retry: false` is a choice, not an absence, so it must reach the hash. A truth test
+    # here would drop exactly the setting the field exists for.
+    for louder in ({"request": {"temperature": 0.2}}, {"answer_length": "one sentence"},
+                   {"timeout": 60}, {"retry": False}, {"retry_pause": 0},
+                   {"prompt": "Ask $count $level questions about:\n$subjects"}):
+        assert prompts.render({**base, **louder})[2] != hashed, louder
+
+    # A custom template is substituted, not formatted, so braces in prose stay put.
+    prompt, _, _ = prompts.render({**base, "prompt": "{json} for $count $role subjects:\n$subjects"})
+    assert prompt.startswith("{json} for 3 AI Engineer subjects:\n1. RAG")
+    # A typo in a placeholder fails here rather than being sent to five models.
+    try:
+        prompts.render({**base, "prompt": "$levl"})
+    except KeyError:
+        pass
+    else:
+        raise AssertionError("an unknown placeholder must fail before the run starts")
+
+
+def test_the_client_owns_some_request_fields():
+    """`model` is the pinning this whole project rests on. A config that could override it
+    would file one model's questions under another's name, silently."""
+    try:
+        chat_json("m", "p", questions_schema(SUBJECTS), "key", {"model": "other", "temperature": 0})
+    except FatalError as error:
+        assert "model" in str(error)
+    else:
+        raise AssertionError("reserved request fields must be refused before any request")
+
+    # A timeout that can only produce timeouts is a config error, so it aborts the run
+    # rather than filing five identical failures against five innocent models.
+    for broken in (0, -30, "30s", True):
+        try:
+            chat_json("m", "p", questions_schema(SUBJECTS), "key", None, broken)
+        except FatalError as error:
+            assert "positive number" in str(error), broken
+        else:
+            raise AssertionError(f"timeout {broken!r} must be refused")
+
+    for field, broken in (("retry", "yes"), ("retry", 1), ("retry_pause", -5), ("retry_pause", "20s")):
+        try:
+            chat_json("m", "p", questions_schema(SUBJECTS), "key", **{field: broken})
+        except FatalError as error:
+            assert field in str(error), (field, broken)
+        else:
+            raise AssertionError(f"{field}={broken!r} must be refused")
+
+
+def test_retry_can_be_turned_off():
+    """`retry: false` is what makes a failure-mode run take seconds instead of two minutes,
+    so it has to actually skip the attempt rather than only skip the pause."""
+    calls = []
+
+    def fail(payload, api_key, timeout):
+        calls.append(timeout)
+        raise GenerationError("nope")
+
+    original, openrouter._attempt = openrouter._attempt, fail
+    try:
+        for retry, expected in ((None, 2), (True, 2), (False, 1)):
+            calls.clear()
+            try:
+                # No pause, so the retrying cases do not sleep through the test.
+                chat_json("m", "p", questions_schema(SUBJECTS), "key",
+                          retry=retry, retry_pause=0, timeout=5)
+            except GenerationError:
+                pass
+            assert len(calls) == expected, f"retry={retry} should make {expected} attempt(s)"
+            assert calls == [5] * expected, "every attempt gets the full timeout, not a share"
+    finally:
+        openrouter._attempt = original
+
+
+def test_a_named_config_replaces_the_parameters_it_does_not_merge():
+    """A traced config must render the same prompt years later, so it inherits nothing.
+    Merging would let an edit to conf/base move a hash the file claims to reproduce."""
+    with tempfile.TemporaryDirectory() as folder:
+        original, store.CONFIGS = store.CONFIGS, pathlib.Path(folder)
+        try:
+            (store.CONFIGS / "traced.yml").write_text(
+                yaml.safe_dump({"role": "AI Engineer", "level": "Rookie",
+                                "subjects": SUBJECTS, "models": ["a"]}), encoding="utf-8"
+            )
+            config = build_run_config({**PARAMS, "config": "traced", "level": "Senior"})
+            assert config["level"] == "Rookie", "the file wins over the parameters it replaces"
+            assert config["models"] == ["a"]
+            assert config["config"] == "traced", "the manifest must record which file ran"
+            # A name that does not exist fails before any request is spent.
+            try:
+                build_run_config({**PARAMS, "config": "missing"})
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("an unknown config name must fail loudly")
+        finally:
+            store.CONFIGS = original
+
+
+def test_a_body_that_never_ends_is_abandoned():
+    """The socket timeout cannot catch this: a connection padded to keep it alive is never
+    silent, which is how one request ran 466s under a 120s socket timeout."""
+
+    class Trickle:
+        """Sends forever, a few bytes at a time, like a padded connection or a model looping
+        on one token. Small chunks are the point: this is read through `read1`, which returns
+        what arrived rather than blocking for a full buffer, so the deadline is checked per
+        packet. Blocking for a full buffer is how a 2s budget once took 81.6s."""
+
+        def read1(self, _n):
+            time.sleep(0.01)
+            return b"xx"
+
+    started = time.monotonic()
+    try:
+        _read_within(Trickle(), 0.1)
+    except GenerationError as error:
+        assert "gave up" in str(error)
+        assert time.monotonic() - started < 1, "the deadline must bind, not merely be noticed"
+    else:
+        raise AssertionError("a body that never ends must be cut off, not waited out")
+
+    # A body that finishes inside the budget is returned whole, deadline or not.
+    class Done:
+        def __init__(self):
+            self.left = [b"{", b"}"]
+
+        def read1(self, _n):
+            return self.left.pop(0) if self.left else b""
+
+    assert _read_within(Done(), 5) == b"{}"
 
 
 def test_a_rejected_key_is_not_a_result_about_the_model():

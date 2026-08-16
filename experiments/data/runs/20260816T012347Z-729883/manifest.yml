@@ -1,0 +1,27 @@
+run_id: 20260816T012347Z-729883
+started_at: '2026-08-16T01:23:47.425732+00:00'
+config: experiment-test
+config_hash: f06a27fd7f58
+prompt_version: custom
+prompt_template: Make me questions to my technical interview.
+answer_length: null
+request: null
+timeout: 180
+retry: true
+retry_pause: 20
+role: AI Engineer
+level: Rookie
+models:
+- google/gemma-4-26b-a4b-it:free
+- nvidia/nemotron-3-super-120b-a12b:free
+- openai/gpt-oss-20b:free
+- nvidia/nemotron-nano-9b-v2:free
+- liquid/lfm-2.5-2.6b:free
+subjects:
+- RAG
+- Transformers
+- Attention Mechanisms
+questions_written: 12
+failed_models:
+- google/gemma-4-26b-a4b-it:free
+prompt: Make me questions to my technical interview.

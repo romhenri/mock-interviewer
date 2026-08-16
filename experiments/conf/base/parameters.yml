@@ -1,6 +1,78 @@
 experiment:
+  # Name a file in conf/experiments/ to run that experiment instead of this block, which is
+  # then ignored entirely rather than merged into (a traced config inherits nothing, or it
+  # would stop rendering the prompt it claims to). `python trace.py` writes one file per
+  # config already on disk.
+  #
+  #     .venv/bin/kedro run --params experiment.config=ai-engineer-rookie-3
+  config: null
+
   role: "AI Engineer"
   level: "Mid"
+
+  # How many of the subjects below one run actually asks for. `null` means all of them:
+  # the survey run, one question per subject, built to compare models on identical material.
+  #
+  # Set it to 3 and the run takes the app's shape instead: `app/lib/prompts.ts` has
+  # QUESTION_COUNT = 3, so three questions in one request is the only request the product
+  # ever makes, and it is the only size whose `latency` is a wait a candidate actually sits
+  # through. The 15-subject run times a job five times larger.
+  #
+  #     .venv/bin/kedro run --params experiment.sample=3
+  #
+  # The subjects are drawn at random rather than taken from the top of the list, so the
+  # assignment is not cherry-picked, and seeded so every model in the run gets the same
+  # three and a re-run pools with the last one instead of opening a table of its own.
+  sample: null
+  sample_seed: 20260815
+
+  # The optional fields. All three are part of config_hash when set, so a run that turns one
+  # gets its own table rather than being averaged with runs that did not. Left unset they
+  # hash exactly as before they existed, which is why every config traced so far still
+  # reproduces.
+
+  # Replaces the built-in prompt. Placeholders are $role, $level, $count, $subjects (the
+  # numbered list) and $answer_length; dollars rather than braces so JSON in the prose needs
+  # no escaping, and an unknown one fails before the run instead of shipping literal text.
+  # This is the field prompt-version sweeps are made of: copy conf/experiments/<a config>.yml,
+  # paste the prompt in, change one paragraph, run both, rate blind.
+  prompt: null
+
+  # The answer budget, quoted into the prompt in three places. A question that only works at
+  # five sentences is a different question, so this is worth an experiment of its own.
+  answer_length: null
+
+  # Passed straight into the OpenRouter request body. temperature, max_tokens, top_p, seed,
+  # repetition_penalty: whatever the provider accepts, this project does not enumerate them.
+  # `model`, `messages`, `response_format` and `stream` are refused, since the client owns
+  # those and overriding `model` would file one model's questions under another's name.
+  #
+  #   request:
+  #     temperature: 0.2
+  #     max_tokens: 800     # would have cut short the 466s run that looped on one token
+  request: null
+
+  # Seconds one request may take, start to finished body. Null means the client's 180s.
+  # Per request, so a model that fails and retries gets the full budget twice: the retry is
+  # there to survive a rate limit, and half a budget meets the same wall with less room.
+  #
+  # It is hashed like the rest because it changes the `fail` column: a 60s run records a
+  # timeout exactly where a 300s run records questions. Size it to the assignment, not to
+  # patience. 3 subjects has never taken more than 80s; 15 subjects has taken 221s and
+  # succeeded, so a survey run wants 300 here.
+  timeout: null
+
+  # Whether a failed request gets a second attempt, and how long to wait before it. Null
+  # means the client's defaults: retry once, 20 seconds apart.
+  #
+  # The pause is what a run's clock is actually made of. Five models retrying 20s apart
+  # spend 100s asleep no matter how short the timeout is, which is why `timeout: 2` still
+  # took 122s. `retry: false` turns a failure-mode experiment from two minutes into ten
+  # seconds, at the cost of measuring the pool without its second chance: rate limits that a
+  # retry would have absorbed are recorded as failures instead. Both are hashed, because
+  # that is a different `fail` column and it must not pool with the retrying runs.
+  retry: null
+  retry_pause: null
 
   # One question per subject, so this list also sets the question count. All 15 AI Engineer
   # subjects, copied from app/lib/types.ts. Every model gets this same assignment — that is

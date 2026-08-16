@@ -27,6 +27,37 @@ QUESTIONS = DATA / "questions.jsonl"
 RATINGS = DATA / "ratings.jsonl"
 RUNS = DATA / "runs"
 
+#: One file per experiment, each a complete definition. See `named_config`.
+CONFIGS = ROOT / "conf" / "experiments"
+
+
+def named_config(params: dict) -> dict:
+    """Swaps in `conf/experiments/<name>.yml` when a run names one, else leaves params alone.
+
+        kedro run --params experiment.config=ai-engineer-rookie-3
+
+    The file *replaces* the parameters rather than merging into them, which is the whole
+    point: an experiment is only reproducible if its definition is complete in one place.
+    A file that inherited the role from conf/base would render a different prompt the day
+    conf/base changed, under the same name, and `config_hash` would move without anything
+    in the file having been edited.
+
+    Kedro's own config envs were the obvious home for this and do not fit: parameters merge
+    destructively per file, and interpolations resolve per directory, so an env can neither
+    override one key nor reference conf/base. This is that feature, in nine lines, with the
+    files in one folder instead of one folder each.
+    """
+    name = params.get("config")
+    if not name:
+        return params
+
+    path = CONFIGS / f"{name}.yml"
+    if not path.is_file():
+        known = sorted(p.stem for p in CONFIGS.glob("*.yml"))
+        raise ValueError(f"no experiment config named {name!r} in {CONFIGS}. Known: {known}")
+
+    return {**yaml.safe_load(path.read_text(encoding="utf-8")), "config": name}
+
 
 def question_id(run_id: str, model: str, index: int) -> str:
     """Stable across re-reads so ratings survive anything but a regeneration."""

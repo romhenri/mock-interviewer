@@ -3,7 +3,6 @@
 ## Setup
 ```bash
 cd app && npm install
-cp .env.local.example .env.local   # OPENROUTER_API_KEY=sk-or-v1-... from https://openrouter.ai/keys
 ```
 
 ## Run
@@ -24,6 +23,9 @@ npm run build
 cd experiments && python3 -m venv .venv && .venv/bin/pip install -e .
 cp .env.example .env       # its own OPENROUTER_API_KEY, not the app's
 .venv/bin/kedro run        # 5 models x 15 subjects, costs 5 of the 50 free requests/day
+.venv/bin/kedro run --params experiment.config=ai-engineer-rookie-3   # saved config
+.venv/bin/kedro run --params experiment.sample=3                      # 3 subjects, app's shape
+.venv/bin/python trace.py  # write conf/experiments/*.yml for configs already run
 .venv/bin/python rate.py   # rate 1-5, blind, resumable
 .venv/bin/python metrics.py
 ```

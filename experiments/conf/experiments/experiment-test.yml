@@ -1,0 +1,18 @@
+role: AI Engineer
+level: Rookie
+subjects:
+- Attention Mechanisms
+- RAG
+- Transformers
+models:
+- google/gemma-4-26b-a4b-it:free
+- nvidia/nemotron-3-super-120b-a12b:free
+- openai/gpt-oss-20b:free
+- nvidia/nemotron-nano-9b-v2:free
+- liquid/lfm-2.5-2.6b:free
+timeout: 180
+retry: true
+retry_pause: 20
+prompt: Make me questions to my technical interview.
+sample: 3
+sample_seed: 1206

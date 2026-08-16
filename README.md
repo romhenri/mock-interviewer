@@ -8,7 +8,6 @@ answer scored 0–100 on correctness, English and depth by an LLM judge. Questio
 mock-interviewer/
 ├── app/                  Next.js app — the thing you run
 ├── experiments/          Kedro pipeline measuring question quality
-└── TICKETS.md            the work, as a checklist
 ```
 
 ## Setup
@@ -18,46 +17,10 @@ You need an OpenRouter API key: https://openrouter.ai/keys
 ```bash
 cd app
 npm install
-cp .env.local.example .env.local   # then paste your key into OPENROUTER_API_KEY
 npm run dev
 ```
 
 Open http://localhost:4242.
-
-`.env.local` holds two variables:
-
-| Variable | Required | Default |
-|---|---|---|
-| `OPENROUTER_API_KEY` | yes | — |
-| `OPENROUTER_MODEL` | no | `openai/gpt-oss-20b:free` |
-
-`OPENROUTER_MODEL` is only the *first* model tried. The free pool is shared and routinely queues or
-rate-limits, so a single-model call fails often enough to be unusable — the client falls through up
-to three models before giving up. Measured round-trip times (Aug 2026):
-
-| model | time |
-|---|---|
-| `google/gemma-4-26b-a4b-it:free` | ~5s |
-| `nvidia/nemotron-3-super-120b-a12b:free` | ~17s |
-| `openai/gpt-oss-20b:free` | ~18s |
-| `nvidia/nemotron-nano-9b-v2:free` | ~37s |
-
-All four support strict structured output, which is mandatory here — the app forces a JSON schema
-rather than parsing prose, so a model without it fails every call. **Set `OPENROUTER_MODEL` to the
-gemma model if you want the app to feel fast**; the default is ~3.5x slower.
-
-Because fallback changes which model judged, each score records the model that produced it, and the
-summary warns when an interview was judged by more than one — scores from different judges are not
-directly comparable. A rejected API key stops the chain immediately instead of failing three times.
-
-## Request budget
-
-OpenRouter's free tier allows **20 requests/minute and 50 requests/day** without credits. It rises
-to 1000/day once you have purchased $10 of credits at any point.
-
-One interview costs **1 request to generate the questions, plus 1 per answer you submit** — so 4 at
-most, and roughly **12 interviews per day** on the free tier. Skipping a question makes no call, so
-an interview where you skip everything costs the single generation request.
 
 ## How it works
 
@@ -89,26 +52,6 @@ database and no account. Closing the tab ends the interview; the cache outlives 
 defaulting a score to zero. A fabricated score is indistinguishable from a real one in the summary,
 so the app shows the error and lets you decide whether to spend another request.
 
-## Tests
-
-```bash
-cd app
-npm test            # requires Node >= 22.6 for TypeScript stripping
-npx tsc --noEmit
-npm run build
-```
-
-Twenty-one tests, covering the two pieces of logic that can silently produce a wrong number: judge
-response validation with per-criterion averaging including skips (`lib/score.ts`), and
-stored-session validation (`lib/session.ts`). Everything else is a thin wrapper around an HTTP call and is verified by
-running the app.
-
-## Notes
-
-`/api/score-answer` and `/api/generate-questions` are unauthenticated. That is fine on localhost,
-but anyone who can reach a deployed instance can spend your daily request quota. Put auth in front
-of it before hosting it anywhere public.
-
 ## Experiments
 
 `experiments/` is a Kedro pipeline measuring **question quality**, the thing this product lives or
@@ -117,5 +60,4 @@ rates each one 1–5 blind, and results accumulate so any run can be compared wi
 
 It is isolated from the app — its own venv, its own key, its own copy of the prompt. It never
 imports from `app/`, so a finding reaches production only when someone hand-ports it into
-`app/lib/prompts.ts`. A full run costs 5 requests against the 50/day cap; the real cost is the
-15–25 minutes of human rating. See [experiments/README.md](experiments/README.md).
+`app/lib/prompts.ts`. [experiments/README.md](experiments/README.md).
