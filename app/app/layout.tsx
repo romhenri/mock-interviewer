@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import SiteHeader from "@/components/SiteHeader";
 import "./globals.css";
 
 /** The interviewer's face. Kept as a text file so the art stays editable as art. */
@@ -29,14 +30,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <header className="flex justify-center pt-8">
-          <pre
-            aria-label="The interviewer"
-            className="select-none font-mono text-[9px] leading-[1.05] opacity-80"
-          >
-            {agent}
-          </pre>
-        </header>
+        <SiteHeader agent={agent} />
         {children}
       </body>
     </html>
