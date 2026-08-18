@@ -1,0 +1,23 @@
+# The paid half of the comparison free-round.yml opened. One flagship per lab, all four
+# confirmed to support structured_outputs, which is not optional here: chat_json forces a
+# json_schema and a model without it fails the request rather than answering loosely.
+#
+# Role, level, subjects and the client settings are copied from free-round.yml *exactly*,
+# and that is the whole point of this file: `models` is not part of config_hash, so this
+# renders d62cf8bfd937 just like the free round and the nine requests land in one table.
+# Change any line below other than `models` and that stops being true.
+role: AI Engineer
+level: Rookie
+subjects:
+- RAG
+- Attention
+- Tokenization
+models:
+- openai/gpt-5.5
+- google/gemini-3.1-pro-preview
+- qwen/qwen3.8-max
+- deepseek/deepseek-v4-flash
+# Per request, so a model that retries gets the full budget twice.
+timeout: 180
+retry: true
+retry_pause: 20

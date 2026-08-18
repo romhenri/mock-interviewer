@@ -1,0 +1,15 @@
+# Traced from 20260818T003336Z-0fc63a by trace.py. Reproduces config_hash e6d1d84b322d.
+# Prompt v2. Runs so far: 20260818T003336Z-0fc63a, 20260818T004829Z-04de79.
+role: AI Engineer
+level: Rookie
+subjects:
+- RAG
+- Attention
+- Tokenization
+models:
+- mistralai/mistral-nemo
+- meta-llama/llama-3.1-8b-instruct
+- openai/gpt-oss-20b
+- openai/gpt-oss-20b:free
+timeout: 120
+retry: false

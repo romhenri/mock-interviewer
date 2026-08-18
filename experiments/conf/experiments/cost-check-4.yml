@@ -1,0 +1,21 @@
+# Paid models on purpose: every :free model bills $0, so a run of them proves the cost
+# column is wired up and nothing about whether it can carry a number. Three of the cheapest
+# structured-output models plus one free one, so the report shows both a real bill and a
+# genuine zero side by side. Three subjects, the app's shape — the whole run is a fraction
+# of a cent.
+role: AI Engineer
+level: Rookie
+subjects:
+- RAG
+- Attention
+- Tokenization
+models:
+- google/gemma-4-26b-a4b-it:free
+- nvidia/nemotron-3-super-120b-a12b:free
+- openai/gpt-oss-20b:free
+- nvidia/nemotron-nano-9b-v2:free
+- liquid/lfm-2.5-2.6b:free
+timeout: 120
+# No second attempt: this run measures the cost column, not the free pool's rate limits,
+# and a retry would spend a second request to learn nothing new about the bill.
+retry: false

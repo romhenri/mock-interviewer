@@ -1,0 +1,26 @@
+# Every :free model in one round, with the retry on. The runs so far turned it off on
+# purpose (cost-check-3 and -4 were measuring the bill, and a retry spends a second request
+# to learn nothing about a price). This one measures the free pool itself, where a rate
+# limit is the failure mode and the retry is the whole point: `openai/gpt-oss-20b:free`
+# failed in both previous runs with a single attempt.
+#
+# Role, level and subjects are copied from cost-check-4 so the prompt is byte-identical to
+# what those runs sent. The hash still moves, because timeout and retry are part of it, and
+# a run that may retry is not timing the same thing as one that may not. That is the field
+# doing its job: this gets its own table rather than being averaged into theirs.
+role: AI Engineer
+level: Rookie
+subjects:
+- RAG
+- Attention
+- Tokenization
+models:
+- google/gemma-4-26b-a4b-it:free
+- nvidia/nemotron-3-super-120b-a12b:free
+- openai/gpt-oss-20b:free
+- nvidia/nemotron-nano-9b-v2:free
+- liquid/lfm-2.5-2.6b:free
+# Per request, so a model that retries gets the full budget twice.
+timeout: 180
+retry: true
+retry_pause: 20
