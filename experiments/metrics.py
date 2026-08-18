@@ -44,6 +44,15 @@ def summarise(questions: list[dict], ratings: dict[tuple[str, str], int]) -> lis
         requests = {row["run_id"] for row in rows}
         failed_requests = {row["run_id"] for row in rows if store.failed(row)}
 
+        # Cost belongs to the request, and the request's cost is repeated on every row it
+        # produced — so one row per run is counted, not one per question. Rows written
+        # before the column existed have no cost, which is unknown rather than free: they
+        # are left out of the sum, and a model whose runs all predate it reports nothing.
+        per_request = {}
+        for row in rows:
+            per_request.setdefault(row["run_id"], row)
+        costs = [row["cost_usd"] for row in per_request.values() if row.get("cost_usd") is not None]
+
         summary.append(
             {
                 "model": model,
@@ -53,6 +62,7 @@ def summarise(questions: list[dict], ratings: dict[tuple[str, str], int]) -> lis
                 "n_questions": len(produced),
                 "coverage": _coverage(produced),
                 "failure_rate": len(failed_requests) / len(requests) if requests else None,
+                "cost_usd": sum(costs) if costs else None,
                 "mean_latency_ms": (
                     statistics.fmean([row["latency_ms"] for row in produced if row["latency_ms"] is not None])
                     if any(row["latency_ms"] is not None for row in produced)
@@ -87,16 +97,17 @@ def _coverage(produced: list[dict]) -> float | None:
 
 
 def to_mlflow(questions: list[dict], ratings: dict[tuple[str, str], int]) -> None:
-    """Logs each run's quality onto the MLflow run the pipeline opened for it.
+    """Logs each request's quality onto the MLflow run the pipeline opened for it.
 
-    A rating arrives hours or days after the run that produced the question, so quality cannot
-    be logged where latency and coverage are. This closes that loop: the existing run is
-    reopened by its `run_id` param and the quality metrics are added to it, which is what
-    makes the MLflow table complete — one row per run, objective columns beside rated ones.
+    A rating arrives hours or days after the request that produced the question, so quality
+    cannot be logged where latency and coverage are. This closes that loop: the existing run
+    is reopened by its (`run_id`, `model`) params and the quality metrics are added to it,
+    which is what makes the MLflow table complete — one row per request, objective columns
+    beside rated ones.
 
-    Per run rather than pooled per config_hash, because an MLflow run *is* a kedro run. The
-    pooled view is the table this script prints; averaging four runs into each of them would
-    put the same number on four rows and call it four measurements.
+    Per request rather than pooled per config_hash, because an MLflow run *is* one request.
+    The pooled view is the table this script prints; averaging four requests into each of
+    them would put the same number on four rows and call it four measurements.
 
     Re-running appends to each metric's history instead of replacing it, so a partly-rated
     run charts its quality settling as more ratings come in.
@@ -117,27 +128,31 @@ def to_mlflow(questions: list[dict], ratings: dict[tuple[str, str], int]) -> Non
     for row in questions:
         by_run[row["run_id"]].append(row)
 
+    # One search, then a dict lookup. A query per (run, model) would refetch the same table
+    # once for every model that produced a question in it.
+    by_request = {
+        (run.data.params.get("run_id"), run.data.params.get("model")): run.info.run_id
+        for run in mlflow.search_runs(output_format="list")
+    }
+
     for run_id, rows in sorted(by_run.items()):
-        found = mlflow.search_runs(filter_string=f"params.run_id = '{run_id}'", output_format="list")
-        if not found:
-            # Runs from before mlflow was wired in, and runs whose mlruns/ was deleted. Their
-            # questions and ratings are intact on disk; only the UI row is missing.
-            print(f"  skip {run_id}: no mlflow run")
-            continue
+        logged = 0
+        for row in summarise(rows, ratings):
+            if not row["n_rated"]:
+                continue
 
-        summary = [row for row in summarise(rows, ratings) if row["n_rated"]]
-        if not summary:
-            continue
+            target = by_request.get((run_id, row["model"]))
+            if target is None:
+                # Requests from before each one became its own mlflow run, and runs whose
+                # mlruns/ was deleted. Their questions and ratings are intact on disk; only
+                # the UI row is missing.
+                continue
 
-        with mlflow.start_run(run_id=found[0].info.run_id):
-            mlflow.log_metrics(
-                {
-                    f"{key}.{row['model']}": row[metric]
-                    for row in summary
-                    for key, metric in (("quality", "mean_quality"), ("rated", "n_rated"))
-                }
-            )
-        print(f"  logged {run_id}: {len(summary)} model(s)")
+            with mlflow.start_run(run_id=target):
+                mlflow.log_metrics({"quality": row["mean_quality"], "rated": row["n_rated"]})
+            logged += 1
+
+        print(f"  logged {run_id}: {logged} request(s)" if logged else f"  skip {run_id}: no request run")
 
 
 def main() -> int:
@@ -168,7 +183,11 @@ def main() -> int:
         print(f"\nconfig {config_hash} — {len(runs)} run(s): {', '.join(runs)}")
         if len(groups) > 1:
             print("  (a separate table per config: different prompts are not comparable)")
-        _print_table(summarise(rows, ratings))
+        summary = summarise(rows, ratings)
+        _print_table(summary)
+        spent = [row["cost_usd"] for row in summary if row["cost_usd"] is not None]
+        if spent:
+            print(f"  total spent: ${sum(spent):.4f} over {len(runs)} run(s)")
 
     if not ratings:
         print("\nNothing rated yet — run `python rate.py`. Only the objective columns are filled in.")
@@ -179,7 +198,8 @@ def main() -> int:
 
 
 def _print_table(summary: list[dict]) -> None:
-    header = f"  {'model':<42} {'quality':>8} {'stdev':>7} {'rated':>6} {'covered':>8} {'fail':>6} {'latency':>9}"
+    header = (f"  {'model':<42} {'quality':>8} {'stdev':>7} {'rated':>6} {'covered':>8} "
+              f"{'fail':>6} {'latency':>9} {'cost':>9}")
     print(header)
     print("  " + "-" * (len(header) - 2))
     for row in summary:
@@ -190,7 +210,8 @@ def _print_table(summary: list[dict]) -> None:
             f"{row['n_rated']:>3}/{row['n_questions']:<2} "
             f"{_or_dash(row['coverage'], '{:.0%}'):>8} "
             f"{_or_dash(row['failure_rate'], '{:.0%}'):>6} "
-            f"{_or_dash(row['mean_latency_ms'], '{:.0f}ms'):>9}"
+            f"{_or_dash(row['mean_latency_ms'], '{:.0f}ms'):>9} "
+            f"{_or_dash(row['cost_usd'], '${:.4f}'):>9}"
         )
 
 

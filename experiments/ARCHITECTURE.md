@@ -43,10 +43,17 @@ they are downstream of it by data, not by import.
 JSONL and run manifests).
 
 **mlflow.db / mlruns/** — the MLflow tracking store, written by the kedro-mlflow plugin plus
-the explicit logging in `nodes.py`. One MLflow run per `kedro run`, carrying the resolved
-config as params, per-model latency and coverage as metrics, the manifest, the prompt and a
-questions table as artifacts, and one trace span per model request. `metrics.py --mlflow` adds
-the human ratings to those runs afterwards. [MLFLOW-HOWTO.md](MLFLOW-HOWTO.md) is the usage
+the explicit logging in `nodes.py`. Two levels, because the request is what gets compared and
+the batch is not. A parent run per `kedro run` carries the resolved config as params, the
+batch totals `cost_usd` and `tokens` (what one execution cost), and the manifest, prompt and
+questions table as artifacts. Nested under it, one run per request carries `model`,
+`config_hash` and `run_id` as params and `latency_ms`, `covered`, `tokens_per_sec`, tokens,
+cost and `failed` as plain metrics, plus its trace span. Plain names on a child rather than
+`latency_ms.<model>` on the parent: the model has to be a value to be grouped, filtered and
+averaged, and a name cannot be. Cost is OpenRouter's own figure, requested with `usage.include`
+and read off the response, not tokens multiplied by a price list kept here. `metrics.py
+--mlflow` adds the human ratings to the request runs afterwards, matching on
+(`run_id`, `model`). [MLFLOW-HOWTO.md](MLFLOW-HOWTO.md) is the usage
 guide, [conf/base/mlflow.yml](conf/base/mlflow.yml) the settings.
 
 A **view**, not a record — both paths are gitignored and rebuildable, and nothing reads from

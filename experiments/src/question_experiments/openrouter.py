@@ -76,9 +76,10 @@ def load_api_key() -> str:
 
 
 #: Fields this client owns. A config setting one of them would not be an experiment, it
-#: would be a broken client: `model` breaks the pinning the whole project rests on, and
-#: `stream` breaks the parsing. Everything else OpenRouter accepts is fair game.
-RESERVED = ("model", "messages", "response_format", "stream")
+#: would be a broken client: `model` breaks the pinning the whole project rests on,
+#: `stream` breaks the parsing, and `usage` carries the accounting the cost column is made
+#: of. Everything else OpenRouter accepts is fair game.
+RESERVED = ("model", "messages", "response_format", "stream", "usage")
 
 
 def chat_json(
@@ -90,7 +91,7 @@ def chat_json(
     timeout: float | None = None,
     retry: bool | None = None,
     retry_pause: float | None = None,
-) -> tuple[dict, int]:
+) -> tuple[dict, int, dict]:
     """Calls one pinned model with a forced JSON schema.
 
     `timeout` is per request, in seconds, defaulting to `TIMEOUT_S`. Per *request*, not per
@@ -110,8 +111,8 @@ def chat_json(
     names each one is a list to keep in sync for no gain. The settings are part of
     `config_hash`, so a run at a different temperature cannot pool with this one.
 
-    Returns the parsed body and the elapsed milliseconds. Raises `GenerationError` after
-    the last attempt — the caller records that as a failed row rather than aborting.
+    Returns the parsed body, the elapsed milliseconds and the usage (tokens and dollars,
+    see `_usage`). Raises `GenerationError` after the last attempt — the caller records that as a failed row rather than aborting.
     """
     reserved = sorted(set(request or {}) & set(RESERVED))
     if reserved:
@@ -140,6 +141,11 @@ def chat_json(
                 "type": "json_schema",
                 "json_schema": {"name": schema["name"], "strict": True, "schema": schema["schema"]},
             },
+            # OpenRouter's accounting extension. Token counts come back without it; `cost`
+            # does not, and that is the number the whole cost column rests on. Asking the
+            # provider what it charged beats multiplying tokens by a price list here that
+            # goes stale the day a model is repriced.
+            "usage": {"include": True},
             **(request or {}),
         }
     ).encode()
@@ -148,7 +154,8 @@ def chat_json(
     for attempt in range(attempts):
         started = time.monotonic()
         try:
-            return _attempt(payload, api_key, timeout), round((time.monotonic() - started) * 1000)
+            questions, usage = _attempt(payload, api_key, timeout)
+            return questions, round((time.monotonic() - started) * 1000), usage
         except FatalError:
             # A rejected key fails the same way on every model, so burning the retry and
             # then the remaining four models just prints the same message five times.
@@ -189,7 +196,28 @@ def _read_within(response, seconds: float) -> bytes:
     return b"".join(chunks)
 
 
-def _attempt(payload: bytes, api_key: str, timeout: float) -> dict:
+#: A request that produced no usage, so every reader sees the same keys on every row.
+#: None rather than 0: a provider that reports nothing did not serve a free request, and
+#: summing it as one would understate the bill.
+NO_USAGE = {"prompt_tokens": None, "completion_tokens": None, "cost_usd": None}
+
+
+def _usage(body: dict) -> dict:
+    """What the request cost, as the provider reports it.
+
+    `cost` is in credits, which are dollars. It is the provider's own number rather than
+    tokens multiplied by a price list kept here, because that list would be wrong the day
+    a model is repriced and wrong silently.
+    """
+    usage = body.get("usage") or {}
+    return {
+        "prompt_tokens": usage.get("prompt_tokens"),
+        "completion_tokens": usage.get("completion_tokens"),
+        "cost_usd": usage.get("cost"),
+    }
+
+
+def _attempt(payload: bytes, api_key: str, timeout: float) -> tuple[dict, dict]:
     request = urllib.request.Request(
         ENDPOINT,
         data=payload,
@@ -220,6 +248,6 @@ def _attempt(payload: bytes, api_key: str, timeout: float) -> dict:
         raise GenerationError(f"no message content (finish_reason: {finish})")
 
     try:
-        return json.loads(content)
+        return json.loads(content), _usage(body)
     except json.JSONDecodeError as error:
         raise GenerationError(f"invalid JSON: {content[:160]}") from error

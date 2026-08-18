@@ -306,17 +306,76 @@ def test_short_responses_are_kept_not_discarded():
 
 
 def test_mlflow_metrics_agree_with_the_report():
-    """The per-model metrics logged at run time must mean what the same-named columns in
-    metrics.py mean, or the UI and the report disagree about the same run."""
+    """The per-request metrics logged at run time must mean what the same-named columns in
+    metrics.py mean, or the UI and the report disagree about the same request."""
     config = build_run_config(PARAMS)
-    rows = _question_rows(config, config["models"][0], _answers(["RAG", "Attention"]), latency_ms=100)
-    rows.append(nodes._failure_row(config, config["models"][1], "rate limited"))
+    usage = {"prompt_tokens": 300, "completion_tokens": 200, "cost_usd": 0.002}
+    rows = _question_rows(config, config["models"][0], _answers(["RAG", "Attention"]),
+                          latency_ms=100, usage=usage)
 
-    logged = nodes._per_model_metrics(rows, config)
-    assert logged[f"covered.{config['models'][0]}"] == metrics._coverage(rows[:2]) == 2 / 3
-    assert logged[f"latency_ms.{config['models'][0]}"] == 100
-    assert logged[f"failed.{config['models'][1]}"] == 1
-    assert f"latency_ms.{config['models'][1]}" not in logged, "a failed request has no latency"
+    logged = nodes._request_metrics(rows, config)
+    assert logged["covered"] == metrics._coverage(rows) == 2 / 3
+    assert logged["latency_ms"] == 100
+    assert logged["cost_usd"] == 0.002, "the request's cost, not the sum over its rows"
+    assert logged["failed"] == 0
+    # 200 completion tokens in 100ms. Latency alone ranks a terser model faster than a
+    # quicker one, and this is the column that separates them.
+    assert logged["tokens_per_sec"] == 2000
+
+    failed = nodes._request_metrics([nodes._failure_row(config, config["models"][1], "429")], config)
+    assert failed["failed"] == 1
+    assert failed["questions_written"] == 0
+    assert "latency_ms" not in failed, "a failed request has no latency"
+    assert "covered" not in failed, "nor coverage — it produced nothing to cover with"
+
+
+def test_a_request_is_its_own_mlflow_run():
+    """Model is a param on the request's run, never a suffix on the metric name: a value in
+    a column groups and averages, a value baked into `latency_ms.<model>` does not."""
+    logged = nodes._request_metrics(
+        _question_rows(build_run_config(PARAMS), "a", _answers(["RAG"]), latency_ms=100), PARAMS
+    )
+    assert not [key for key in logged if "." in key], f"flattened metric names are back: {logged}"
+
+
+def test_cost_is_per_request_not_per_question():
+    """The request's cost is repeated on every row it produced, so anything that sums the
+    column bills each question separately. Two questions from one request cost one request."""
+    config = build_run_config(PARAMS)
+    usage = {"prompt_tokens": 300, "completion_tokens": 200, "cost_usd": 0.002}
+    rows = _question_rows(config, "a", _answers(["RAG", "Attention"]), latency_ms=100, usage=usage)
+    rows += _question_rows(config, "b", _answers(["RAG"]), latency_ms=100, usage=usage)
+
+    totals = nodes._run_totals(rows)
+    assert totals == {"cost_usd": 0.004, "tokens": 1000}, "two requests, five rows"
+
+    # A model whose provider reported nothing is unknown, not free — and must not crash
+    # the totals of the models that did report.
+    rows += _question_rows(config, "c", _answers(["RAG"]), latency_ms=100)
+    assert nodes._run_totals(rows)["cost_usd"] == 0.004
+
+    # metrics.py reads the same rows and must reach the same bill.
+    assert metrics.summarise(rows, {})[0]["cost_usd"] == 0.002
+
+
+def test_usage_is_read_from_the_body_and_cannot_be_overridden():
+    """`usage.include` is what puts `cost` in the body at all, so a config that set it
+    would silently empty the cost column."""
+    assert openrouter._usage({"usage": {"prompt_tokens": 7, "completion_tokens": 3, "cost": 0.01}}) == {
+        "prompt_tokens": 7,
+        "completion_tokens": 3,
+        "cost_usd": 0.01,
+    }
+    # A provider that reports nothing gives None, never 0: a free request and an unreported
+    # one are different findings.
+    assert openrouter._usage({}) == openrouter.NO_USAGE
+
+    try:
+        chat_json("m", "p", questions_schema(SUBJECTS), "key", {"usage": {"include": False}})
+    except FatalError as error:
+        assert "usage" in str(error)
+    else:
+        raise AssertionError("usage is the client's, not the config's")
 
 
 def test_latest_rating_wins_per_rater():

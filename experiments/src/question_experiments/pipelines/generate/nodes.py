@@ -8,9 +8,16 @@ import uuid
 from contextlib import contextmanager
 
 import mlflow
+from mlflow.tracing.constant import SpanAttributeKey
 
 from question_experiments import store
-from question_experiments.openrouter import FatalError, GenerationError, chat_json, load_api_key
+from question_experiments.openrouter import (
+    NO_USAGE,
+    FatalError,
+    GenerationError,
+    chat_json,
+    load_api_key,
+)
 from question_experiments.prompts import CLIENT_SETTINGS, PROMPT_VERSION, render
 
 
@@ -118,53 +125,135 @@ def generate_questions(config: dict) -> list[dict]:
     rows: list[dict] = []
 
     for model in config["models"]:
-        # One span per request, so MLflow's trace view shows what each model was sent, what it
-        # sent back and how long it took — including the failures, which are the rows a
-        # rating pass never sees and the ones worth reading a trace for.
-        with _span(model, span_type="LLM") as span:
-            if span:
-                span.set_inputs({"model": model, "prompt": config["prompt"]})
-            try:
-                body, latency_ms = chat_json(
-                    model,
-                    config["prompt"],
-                    config["schema"],
-                    api_key,
-                    **{key: config[key] for key in CLIENT_SETTINGS},
-                )
-            except FatalError:
-                # A rejected key is not a result about this model. Recording it as one would
-                # file five identical "failures" and invite the conclusion that every model
-                # is broken.
-                raise
-            except GenerationError as error:
-                rows.append(_failure_row(config, model, str(error)))
-                if span:
-                    span.set_outputs({"error": str(error)})
-                continue
-
-            questions = body.get("questions")
-            if not isinstance(questions, list) or not questions:
-                failure = f"no questions in response: {str(body)[:120]}"
-                rows.append(_failure_row(config, model, failure))
-                if span:
-                    span.set_outputs({"error": failure})
-                continue
-
-            if span:
-                span.set_outputs({"questions": questions, "latency_ms": latency_ms})
-
-        # A short response is kept, not discarded. A strict schema guarantees a count only
-        # when the provider honours it, and the free pool includes providers that do not —
-        # but 14 usable questions are 14 usable questions, and throwing them away would
-        # both waste the request and hide the shortfall behind a blanket failure. The gap
-        # stays visible in the report as questions produced against subjects assigned.
-        rows.extend(_question_rows(config, model, questions[: len(config["subjects"])], latency_ms))
+        # One MLflow run per request, because the request is the thing being compared. The
+        # batch is not: it holds five models whose only relationship is having been launched
+        # together, and folding them into one row forces the model into the metric *name*
+        # (`latency_ms.<model>`). A name cannot be grouped, filtered or averaged — which is
+        # how a table of two configs quietly averages into a number describing neither.
+        with _request_run(config, model):
+            mine = _request(config, model, api_key)
+            if _tracking():
+                mlflow.log_metrics(_request_metrics(mine, config))
+        rows.extend(mine)
 
     return rows
 
 
-def _question_rows(config: dict, model: str, questions: list[dict], latency_ms: int) -> list[dict]:
+@contextmanager
+def _request_run(config: dict, model: str):
+    """The nested run one request is logged to, or nothing at all when not tracking.
+
+    Nested rather than flat so the batch keeps a parent to hang its totals and its manifest
+    on, and so the UI still collapses a run's requests under the run that launched them.
+
+    The params are what makes the child findable and groupable: `run_id` joins it back to
+    the manifest and to `metrics.py`, `config_hash` says which requests are comparable, and
+    `model` is the column every analysis groups by.
+    """
+    if not _tracking():
+        yield None
+        return
+    with mlflow.start_run(nested=True, run_name=model) as run:
+        mlflow.log_params(
+            {
+                "run_id": config["run_id"],
+                "model": model,
+                "config": config["config"],
+                "config_hash": config["config_hash"],
+            }
+        )
+        yield run
+
+
+def _request(config: dict, model: str, api_key: str) -> list[dict]:
+    """One model's request, as the rows it produced — questions, or a single failure row."""
+    rows: list[dict] = []
+    # One span per request, so MLflow's trace view shows what each model was sent, what it
+    # sent back and how long it took — including the failures, which are the rows a
+    # rating pass never sees and the ones worth reading a trace for.
+    with _span(model, span_type="LLM") as span:
+        if span:
+            span.set_inputs({"model": model, "prompt": config["prompt"]})
+        try:
+            body, latency_ms, usage = chat_json(
+                model,
+                config["prompt"],
+                config["schema"],
+                api_key,
+                **{key: config[key] for key in CLIENT_SETTINGS},
+            )
+        except FatalError:
+            # A rejected key is not a result about this model. Recording it as one would
+            # file five identical "failures" and invite the conclusion that every model
+            # is broken.
+            raise
+        except GenerationError as error:
+            rows.append(_failure_row(config, model, str(error)))
+            if span:
+                span.set_outputs({"error": str(error)})
+                _mark_failed(span)
+            return rows
+
+        questions = body.get("questions")
+        if not isinstance(questions, list) or not questions:
+            failure = f"no questions in response: {str(body)[:120]}"
+            # Usage rides along: the request was paid for whether or not it answered,
+            # and a cost column that skipped the duds would understate the bill.
+            rows.append(_failure_row(config, model, failure, usage))
+            if span:
+                span.set_outputs({"error": failure})
+                _log_tokens(span, usage)
+                _mark_failed(span)
+            return rows
+
+        if span:
+            span.set_outputs({"questions": questions, "latency_ms": latency_ms, **usage})
+            _log_tokens(span, usage)
+
+    # A short response is kept, not discarded. A strict schema guarantees a count only
+    # when the provider honours it, and the free pool includes providers that do not —
+    # but 14 usable questions are 14 usable questions, and throwing them away would
+    # both waste the request and hide the shortfall behind a blanket failure. The gap
+    # stays visible in the report as questions produced against subjects assigned.
+    rows.extend(_question_rows(config, model, questions[: len(config["subjects"])], latency_ms, usage))
+
+    return rows
+
+
+def _mark_failed(span) -> None:
+    """Turns the span red, which catching the exception here otherwise prevents.
+
+    MLflow marks a span ERROR when the exception leaves the `start_span` block, and this
+    node catches it on purpose — a rate-limited model is a result, not a crashed pipeline.
+    The status is set by hand instead, so a failed request is filterable in the UI
+    (`trace.status = 'ERROR'`) rather than an OK span with an error buried in its outputs.
+    """
+    span.set_status("ERROR")
+
+
+def _log_tokens(span, usage: dict) -> None:
+    """Puts the token counts where MLflow's trace UI looks for them.
+
+    This one attribute is what fills the token columns and totals a trace's usage across
+    its spans, so it is set rather than hand-logged as metrics. Skipped when the provider
+    reported no counts — a zero there reads as a free request.
+    """
+    prompt, completion = usage["prompt_tokens"], usage["completion_tokens"]
+    if prompt is None and completion is None:
+        return
+    span.set_attribute(
+        SpanAttributeKey.CHAT_USAGE,
+        {
+            "input_tokens": prompt or 0,
+            "output_tokens": completion or 0,
+            "total_tokens": (prompt or 0) + (completion or 0),
+        },
+    )
+
+
+def _question_rows(
+    config: dict, model: str, questions: list[dict], latency_ms: int, usage: dict | None = None
+) -> list[dict]:
     """One row per question the model returned.
 
     `subject` is the subject the model tagged, never the slot it landed in. Compliance is
@@ -176,6 +265,10 @@ def _question_rows(config: dict, model: str, questions: list[dict], latency_ms: 
 
     `n_subjects` rides along so the report can compute coverage without reopening the
     manifest for every row.
+
+    Tokens and cost belong to the *request*, not the question, so they repeat on every row
+    it produced — the same shape `latency_ms` already has. Readers take them from one row
+    per model; summing the column would multiply the bill by the number of questions.
     """
     return [
         {
@@ -191,13 +284,14 @@ def _question_rows(config: dict, model: str, questions: list[dict], latency_ms: 
             # swaps what gets rated. `answer` is the schema's key, this is the row's.
             "suggested_answer": str(item.get("answer", "")),
             "latency_ms": latency_ms,
+            **(usage or NO_USAGE),
             "error": None,
         }
         for index, item in enumerate(questions)
     ]
 
 
-def _failure_row(config: dict, model: str, error: str) -> dict:
+def _failure_row(config: dict, model: str, error: str, usage: dict | None = None) -> dict:
     return {
         "question_id": store.question_id(config["run_id"], model, -1),
         "run_id": config["run_id"],
@@ -209,6 +303,7 @@ def _failure_row(config: dict, model: str, error: str) -> dict:
         "text": None,
         "suggested_answer": None,
         "latency_ms": None,
+        **(usage or NO_USAGE),
         "error": error,
     }
 
@@ -237,6 +332,7 @@ def persist_run(rows: list[dict], config: dict) -> dict:
         "subjects": config["subjects"],
         "questions_written": sum(1 for row in rows if not store.failed(row)),
         "failed_models": failed,
+        **_run_totals(rows),
         "prompt": config["prompt"],
     }
     path = store.write_manifest(config["run_id"], summary)
@@ -247,7 +343,9 @@ def persist_run(rows: list[dict], config: dict) -> dict:
             {
                 "questions_written": summary["questions_written"],
                 "models_failed": len(failed),
-                **_per_model_metrics(rows, config),
+                # What this run cost, in one number, which is the whole point of the
+                # column: the UI sorts and charts runs by it.
+                **_run_totals(rows),
             }
         )
         # The questions themselves, as a table rather than a blob: MLflow renders it, so the
@@ -256,7 +354,8 @@ def persist_run(rows: list[dict], config: dict) -> dict:
         mlflow.log_table(
             {
                 key: [row[key] for row in rows]
-                for key in ("model", "subject", "text", "suggested_answer", "latency_ms", "error")
+                for key in ("model", "subject", "text", "suggested_answer", "latency_ms",
+                            "prompt_tokens", "completion_tokens", "cost_usd", "error")
             },
             "questions.json",
         )
@@ -264,22 +363,68 @@ def persist_run(rows: list[dict], config: dict) -> dict:
     return summary
 
 
-def _per_model_metrics(rows: list[dict], config: dict) -> dict[str, float]:
-    """`latency_ms.<model>` and `covered.<model>`, so the UI can chart models against each other.
+def _request_metrics(rows: list[dict], config: dict) -> dict[str, float]:
+    """What one request is worth measuring by, as plain metric names on its own run.
 
-    Objective columns only. Quality is a human rating that does not exist yet when this run
-    ends — `metrics.py --mlflow` logs it back onto this run once someone has rated it.
+    Plain because the model is a param here, not a suffix: `latency_ms` on fifty request
+    runs is a column you group by model and average, which `latency_ms.<model>` on ten batch
+    runs is not. Objective columns only — quality is a human rating that does not exist yet
+    when this run ends, and `metrics.py --mlflow` logs it back onto this same run later.
 
-    Coverage is distinct subjects over subjects assigned, the same definition metrics.py uses:
-    a model that writes three questions about RAG and skips Diffusion Models produced a full
-    set of rows while covering less of the assignment.
+    `covered` is distinct subjects over subjects assigned, the same definition metrics.py
+    uses: a model that writes three questions about RAG and skips Diffusion Models produced
+    a full set of rows while covering less of the assignment.
     """
-    metrics = {}
-    for model in config["models"]:
-        produced = [row for row in rows if row["model"] == model and not store.failed(row)]
-        if not produced:
-            metrics[f"failed.{model}"] = 1
-            continue
-        metrics[f"latency_ms.{model}"] = produced[0]["latency_ms"]
-        metrics[f"covered.{model}"] = len({row["subject"] for row in produced}) / len(config["subjects"])
+    produced = [row for row in rows if not store.failed(row)]
+    # One request per model, so its cost and usage sit identically on every row it produced.
+    # Read from the first, never summed. A failed request is charged too, which is why this
+    # reads `rows` rather than `produced`.
+    first = rows[0]
+
+    metrics: dict[str, float] = {
+        "failed": 0 if produced else 1,
+        "questions_written": len(produced),
+    }
+    if first.get("cost_usd") is not None:
+        metrics["cost_usd"] = first["cost_usd"]
+    if _tokens(first) is not None:
+        metrics["tokens"] = _tokens(first)
+        metrics["completion_tokens"] = first["completion_tokens"] or 0
+        metrics["prompt_tokens"] = first["prompt_tokens"] or 0
+
+    if not produced:
+        return metrics
+
+    metrics["latency_ms"] = produced[0]["latency_ms"]
+    metrics["covered"] = len({row["subject"] for row in produced}) / len(config["subjects"])
+
+    # Latency alone ranks a model that wrote 234 tokens above one that wrote 1138, and calls
+    # the first faster. It measured a shorter answer. This is the column that separates the
+    # two, and the only one of the pair worth comparing across configs.
+    if metrics.get("completion_tokens") and produced[0]["latency_ms"]:
+        metrics["tokens_per_sec"] = metrics["completion_tokens"] / (produced[0]["latency_ms"] / 1000)
     return metrics
+
+
+def _tokens(row: dict) -> int | None:
+    """Prompt plus completion, or None when the provider reported neither."""
+    prompt, completion = row.get("prompt_tokens"), row.get("completion_tokens")
+    if prompt is None and completion is None:
+        return None
+    return (prompt or 0) + (completion or 0)
+
+
+def _run_totals(rows: list[dict]) -> dict[str, float]:
+    """`cost_usd` and `tokens` for the whole run — what this experiment cost to run once.
+
+    One row per model, because one request per model: the rows repeat the request's cost
+    for every question it produced, and summing the column would bill each question
+    separately.
+    """
+    per_model = {}
+    for row in rows:
+        per_model.setdefault(row["model"], row)
+    return {
+        "cost_usd": sum(row.get("cost_usd") or 0 for row in per_model.values()),
+        "tokens": sum(_tokens(row) or 0 for row in per_model.values()),
+    }
