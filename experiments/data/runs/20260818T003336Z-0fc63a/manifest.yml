@@ -1,0 +1,57 @@
+run_id: 20260818T003336Z-0fc63a
+started_at: '2026-08-18T00:33:36.352900+00:00'
+config: cost-check-3
+config_hash: e6d1d84b322d
+prompt_version: v2
+prompt_template: null
+answer_length: null
+request: null
+timeout: 120
+retry: false
+retry_pause: null
+role: AI Engineer
+level: Rookie
+models:
+- mistralai/mistral-nemo
+- meta-llama/llama-3.1-8b-instruct
+- openai/gpt-oss-20b
+- openai/gpt-oss-20b:free
+subjects:
+- RAG
+- Attention
+- Tokenization
+questions_written: 6
+failed_models:
+- mistralai/mistral-nemo
+- openai/gpt-oss-20b:free
+cost_usd: 0.00035897
+tokens: 2495
+prompt: "You are a senior technical interviewer hiring for a Rookie-level AI Engineer\
+  \ position.\n\nWrite exactly 3 interview questions for this role — one for each\
+  \ subject below, in\nthis order. Return each question tagged with the subject it\
+  \ belongs to, and with the\nanswer you would accept as full credit.\n\n1. RAG\n\
+  2. Attention\n3. Tokenization\n\nPitch every question at the Rookie level: ask what\
+  \ someone at that level is expected to know, and\nnothing beyond it. A Rookie candidate\
+  \ who knows their job should be able to answer all of them.\n\nThe candidate answers\
+  \ out loud, in 2–3 sentences. Every question must be fully\nanswerable in that space\
+  \ by someone who knows the material.\n\nRules:\n- Ask about ONE concept per question.\
+  \ Never join two questions with \"and\" — \"What is X, and\n  how does it differ\
+  \ from Y?\" is two questions and does not fit the length budget.\n- Prefix each\
+  \ question with a short topic label, then a colon.\n- Be specific. Name the actual\
+  \ technology, pattern or failure mode. A question that could\n  appear in any interview\
+  \ for any role is a bad question.\n- Use each subject exactly once. Do not repeat\
+  \ a subject and do not skip one.\n- No code, no diagrams, no \"walk me through your\
+  \ experience with…\" biography questions.\n- Return only the questions, with no\
+  \ numbering or preamble.\n\nFor every question, also write the answer. It is the\
+  \ answer you would give full credit to,\nand it must fit the same 2–3 sentences\
+  \ the candidate has — it shows what a complete answer\nlooks like at that length.\
+  \ Write it the way a candidate would say it out loud, not as advice\nabout what\
+  \ to say. Name the actual mechanism; an answer that restates the question in other\n\
+  words is not a full-credit answer.\n\nGood examples of the shape and scope:\n- \"\
+  Reverse Proxy: What is the primary function of a reverse proxy in a system architecture?\"\
+  \n- \"Cache Invalidation: What is a cache stampede, and what triggers it?\"\n- \"\
+  Connection Management: Why do application servers handling thousands of concurrent\n\
+  \  requests need connection pooling?\"\n\nBad — too broad to answer in 2–3 sentences:\n\
+  - \"Explain the inner workings and appropriate use cases for Cache-Aside, Read-Through\
+  \ and\n  Write-Through caching patterns.\"\n- \"How do consensus algorithms like\
+  \ Raft or Paxos solve leader election, and what are the\n  trade-offs between them?\""
